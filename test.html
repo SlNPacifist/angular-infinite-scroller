@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <head>
+    <script src="http://coffeescript.org/extras/coffee-script.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.0/angular.js"></script>
+    <script src="./src/ui-scroller.coffee" type="text/coffeescript"></script>
+    <script src="./ui-example.coffee" type="text/coffeescript"></script>
+  </head>
+  <body ng-controller="mainController">
+    <div scroller-viewport scroller-source="data" ng-transclude>
+      <p>Simple text test here</p>
+      <p scroller-item="item">{{value.line}}</p>
+    </div>
+  </body>
+</html>

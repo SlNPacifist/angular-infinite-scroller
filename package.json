@@ -1,0 +1,18 @@
+{
+  "version": "0.0.0",
+  "private": true,
+  "name": "scroller",
+  "description": "Infinite scroll for angular.js",
+  "license": "MIT",
+  "dependencies": {
+  },
+  "devDependencies": {
+    "bower": "^1.7.7"
+  },
+  "scripts": {
+    "postinstall": "bower install",
+    "prestart": "npm install",
+    "start": "node server/index.js",
+    "preupdate-webdriver": "npm install",
+  }
+}
