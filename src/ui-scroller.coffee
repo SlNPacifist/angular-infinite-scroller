@@ -1,12 +1,10 @@
-getInsertAfterFunction = (element) ->
-    parent = element.parentNode
-    if element.nextSibling
-        target = element.nextSibling
-        (el) ->
-            parent.insertBefore(el, target)
+insertAfter = (element, target) ->
+    parent = target.parentNode
+    if target.nextSibling
+        next = target.nextSibling
+        parent.insertBefore(element, next)
     else
-        (el) ->
-            parent.appendChild(el)
+        parent.appendChild(element)
 
 removeRenderedElements = (elements_to_delete) ->
     for _, item of elements_to_delete
@@ -18,23 +16,23 @@ updateRenderedElements = (prev_elements, next_elements) ->
     rendered_elements_to_delete = []
     for data, i in next_elements
         if i of prev_elements
-            new_rendered_elements[i] = item
+            new_rendered_elements[i] = prev_elements[i]
             delete prev_elements[i]
         else
             new_rendered_elements[i] = {scope: null, clone: null, data: data}
     new_rendered_elements
 
-updateElementsDOM = (start, rendered_elements, $transclude) ->
-    insert = getInsertAfterFunction(start)
+updateElementsDOM = (insert_point, rendered_elements, $transclude) ->
     for _, item of rendered_elements
         if item.scope
-            insert(item.node)
+            insertAfter(item.node, insert_point)
         else
             $transclude (node, scope) ->
                 item.scope = scope
                 item.node = node[0]
                 item.scope.scrData = item.data
-                insert(item.node)
+                insertAfter(item.node, insert_point)
+        insert_point = item.node
 
 
 angular.module('ui.scroller', [])
