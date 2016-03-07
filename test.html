@@ -5,11 +5,29 @@
     <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.0/angular.js"></script>
     <script src="./src/ui-scroller.coffee" type="text/coffeescript"></script>
     <script src="./ui-example.coffee" type="text/coffeescript"></script>
+    <style>
+      .editor-body {
+        position: relative;
+      }
+      .editor-body p {
+        margin: 0;
+      }
+      .numbers {
+        position: absolute;
+        width: 20px;
+        left: 0;
+        top: 0;
+      }
+      .text {
+        margin-left: 20px;
+      }
+    </style>
   </head>
   <body ng-controller="mainController">
-    <div scroller-viewport scroller-source="data" ng-transclude>
-      <p>Simple text test here</p>
-      <p scroller-item="item">{{value.line}}</p>
+    <p>Simple text test here</p>
+    <div class="editor-body" scroller-viewport scroller-source="data" ng-transclude>
+      <div class="numbers"><p scroller-item="item">{{scrData.index}}</p></div>
+      <div class="text"><p scroller-item="item">{{scrData.line}}</p></div>
     </div>
   </body>
 </html>

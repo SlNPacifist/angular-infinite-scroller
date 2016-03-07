@@ -16,12 +16,12 @@ removeRenderedElements = (elements_to_delete) ->
 updateRenderedElements = (prev_elements, next_elements) ->
     new_rendered_elements = {}
     rendered_elements_to_delete = []
-    for item, i in next_elements
+    for data, i in next_elements
         if i of prev_elements
             new_rendered_elements[i] = item
             delete prev_elements[i]
         else
-            new_rendered_elements[i] = {scope: null, clone: null, value: item}
+            new_rendered_elements[i] = {scope: null, clone: null, data: data}
     new_rendered_elements
 
 updateElementsDOM = (start, rendered_elements, $transclude) ->
@@ -33,7 +33,7 @@ updateElementsDOM = (start, rendered_elements, $transclude) ->
             $transclude (node, scope) ->
                 item.scope = scope
                 item.node = node[0]
-                item.scope.value = item.value
+                item.scope.scrData = item.data
                 insert(item.node)
 
 
@@ -47,15 +47,14 @@ angular.module('ui.scroller', [])
         $scope.list = []
         @$scope = $scope
         $scope.$watch 'scrollerSource', (value) ->
-            $scope.list = ({line: line} for line in value)
-            console.log("Setting new source", value, $scope.list)
+            $scope.list = ({index: i, line: line} for line, i in value)
         return null # Anything returned here will be used instead of controller
     ]
 
 .directive 'scrollerItem', ->
     restrict: 'A'
     require: '^^scrollerViewport'
-    transclude: true
+    transclude: 'element'
     scope: {}
     link: ($scope, $element, $attrs, viewportCtrl, $transclude) ->
         rendered_elements = {}
