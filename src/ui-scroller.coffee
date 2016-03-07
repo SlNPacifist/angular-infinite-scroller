@@ -9,13 +9,14 @@ insertAfter = (element, target) ->
 removeRenderedElements = (elements_to_delete) ->
     for _, item of elements_to_delete
         item.node.remove()
-        item.scope.destroy()
+        item.scope.$destroy()
 
 updateRenderedElements = (prev_elements, next_elements) ->
     new_rendered_elements = {}
     rendered_elements_to_delete = []
-    for data, i in next_elements
-        if i of prev_elements
+    for data in next_elements
+        i = data.index
+        if data.index of prev_elements
             new_rendered_elements[i] = prev_elements[i]
             delete prev_elements[i]
         else
@@ -45,7 +46,7 @@ angular.module('ui.scroller', [])
         $scope.list = []
         @$scope = $scope
         $scope.$watch 'scrollerSource', (value) ->
-            $scope.list = ({index: i, line: line} for line, i in value)
+            $scope.list = value
         return null # Anything returned here will be used instead of controller
     ]
 

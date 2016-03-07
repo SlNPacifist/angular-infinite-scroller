@@ -1,21 +1,19 @@
 angular.module('application', ['ui.scroller'])
     .controller 'mainController', [ '$scope', ($scope)->
         $scope.data = [
-            'first line'
-            'second line'
-            'third line'
-            'fourth line'
+            {index: 0, line: 'first line'}
+            {index: 1, line: 'second line'}
+            {index: 2, line: 'third line'}
+            {index: 3, line: 'fourth line'}
         ]
 
         window.setTimeout ->
             $scope.$apply ->
                 $scope.data = [
-                    'first line'
-                    'second line'
-                    'third line'
-                    'fourth line'
-                    'fifth line'
-                    'sixth line'
+                    {index: 2, line: 'third line'}
+                    {index: 3, line: 'fourth line'}
+                    {index: 4, line: 'fifth line'}
+                    {index: 5, line: 'sixth line'}
                 ]
         , 3000
     ]
