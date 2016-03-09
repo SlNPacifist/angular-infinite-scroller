@@ -8,6 +8,8 @@
     <style>
       .editor-body {
         position: relative;
+        max-height: 500px;
+        overflow: scroll;
       }
       .editor-body p {
         margin: 0;
@@ -25,9 +27,9 @@
   </head>
   <body ng-controller="mainController">
     <p>Simple text test here</p>
-    <div class="editor-body" scroller-viewport scroller-source="data" ng-transclude>
+    <div class="editor-body" scroller-viewport scroller-source="getData" ng-transclude>
       <div class="numbers"><p scroller-item="item">{{scrData.index}}</p></div>
-      <div class="text"><p scroller-item="item">{{scrData.line}}</p></div>
+      <div class="text"><p scroller-item="item">{{scrData.data}}</p></div>
     </div>
   </body>
 </html>
