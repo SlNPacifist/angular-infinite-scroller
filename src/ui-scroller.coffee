@@ -1,3 +1,15 @@
+VIEWPORT_DEFAULT_SETTINGS =
+    paddingTop:
+        min: 100
+        max: 150
+    paddingBottom:
+        min: 100
+        max: 150
+    itemsPerRequest: 10
+    autoUpdateInterval: 1000
+    afterScrollWaitTime: 100
+
+
 insertAfter = (element, target) ->
     parent = target.parentNode
     if target.nextSibling
@@ -35,24 +47,37 @@ class Buffer
             @[@start + idx] = item
         @length += items.length
 
+
 class ScrollerViewport
     constructor: (@scope, @_element) ->
-        @_settings =
-            paddingTop:
-                min: 100
-                max: 150
-            paddingBottom:
-                min: 100
-                max: 150
-            itemsPerRequest: 10
+        @_updateSettings()
+        @scope.$watch('scrollerSettings', @_updateSettings, true)
+        @_getItems = @scope.scrollerSource.bind(@)
+        @_drawnItems = []
+        @_buffer = new Buffer()
         @_requesting_top_items = false
         @_requesting_bottom_items = false
-        @_getItems = @scope.scrollerSource.bind(@)
-        @_watchHandler = window.setInterval(@_updateStateAsync, 1000)
         @_updateStateAsync()
         @_element.addEventListener('scroll', @_updateStateAsync)
-        @_drawnItems = []
-        @_buffer = new Buffer
+
+    _updateSettings: =>
+        new_settings =
+            paddingTop:
+                min: @scope.$eval('scrollerSettings.paddingTop.min') ? VIEWPORT_DEFAULT_SETTINGS.paddingTop.min
+                max: @scope.$eval('scrollerSettings.paddingTop.max') ? VIEWPORT_DEFAULT_SETTINGS.paddingTop.max
+            paddingBottom:
+                min: @scope.$eval('scrollerSettings.paddingBottom.min') ? VIEWPORT_DEFAULT_SETTINGS.paddingBottom.min
+                max: @scope.$eval('scrollerSettings.paddingBottom.max') ? VIEWPORT_DEFAULT_SETTINGS.paddingBottom.max
+            itemsPerRequest: @scope.$eval('scrollerSettings.itemsPerRequest') ? VIEWPORT_DEFAULT_SETTINGS.itemsPerRequest
+            autoUpdateInterval: @scope.$eval('scrollerSettings.autoUpdateInterval') ? VIEWPORT_DEFAULT_SETTINGS.autoUpdateInterval
+            afterScrollWaitTime: @scope.$eval('scrollerSettings.afterScrollWaitTime') ? VIEWPORT_DEFAULT_SETTINGS.afterScrollWaitTime
+        if @_settings?.autoUpdateInterval != new_settings.autoUpdateInterval
+            @_changeAutoUpdateInterval(new_settings.autoUpdateInterval)
+        @_settings = new_settings
+
+    _changeAutoUpdateInterval: (interval) =>
+        window.clearInterval(@_autoUpdateHandler) if @_autoUpdateHandler?
+        @_autoUpdateHandler = window.setInterval(@_updateStateAsync, interval)
 
     _requestMoreTopItems: =>
         return if @_requesting_top_items
@@ -83,7 +108,7 @@ class ScrollerViewport
 
     _updateState: =>
         now = new Date()
-        if @_element.scrollTop == @_lastScrollTop && now - @_lastScrollTopChange > 100
+        if @_element.scrollTop == @_lastScrollTop && now - @_lastScrollTopChange > @_settings.afterScrollWaitTime
             if @_element.scrollTop > @_settings.paddingTop.max
                 @_removeTopDrawnItem()
             else if @_element.scrollTop < @_settings.paddingTop.min
@@ -198,7 +223,7 @@ angular.module('ui.scroller', [])
 .directive 'scrollerViewport', ->
     restrict: 'A'
     transclude: true
-    scope: {'scrollerSource': '='}
+    scope: {'scrollerSource': '=', 'scrollerSettings': '='}
     controller: ($scope, $element) ->
         new ScrollerViewport($scope, $element[0])
 

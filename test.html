@@ -27,9 +27,9 @@
   </head>
   <body ng-controller="mainController">
     <p>Simple text test here</p>
-    <div class="editor-body" scroller-viewport scroller-source="getData" ng-transclude>
-      <div class="numbers"><p scroller-item="item">{{scrData.index}}</p></div>
-      <div class="text"><p scroller-item="item">{{scrData.data}}</p></div>
+    <div class="editor-body" scroller-viewport scroller-source="getData" scroller-settings="scrollerViewportSettings" ng-transclude>
+      <div class="numbers"><p scroller-item>{{scrData.index}}</p></div>
+      <div class="text"><p scroller-item>{{scrData.data}}</p></div>
     </div>
   </body>
 </html>
