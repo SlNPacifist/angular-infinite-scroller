@@ -8,6 +8,10 @@ VIEWPORT_DEFAULT_SETTINGS =
     itemsPerRequest: 10
     autoUpdateInterval: 1000
     afterScrollWaitTime: 100
+    topBoundaryTimeout: 10000
+    bottomBoundaryTimeout: 10000
+    bufferTopPadding: 20
+    bufferBottomPadding: 20
 
 
 insertAfter = (element, target) ->
@@ -71,6 +75,10 @@ class ScrollerViewport
             itemsPerRequest: @scope.$eval('scrollerSettings.itemsPerRequest') ? VIEWPORT_DEFAULT_SETTINGS.itemsPerRequest
             autoUpdateInterval: @scope.$eval('scrollerSettings.autoUpdateInterval') ? VIEWPORT_DEFAULT_SETTINGS.autoUpdateInterval
             afterScrollWaitTime: @scope.$eval('scrollerSettings.afterScrollWaitTime') ? VIEWPORT_DEFAULT_SETTINGS.afterScrollWaitTime
+            topBoundaryTimeout: @scope.$eval('scrollerSettings.topBoundaryTimeout') ? VIEWPORT_DEFAULT_SETTINGS.topBoundaryTimeout
+            bottomBoundaryTimeout: @scope.$eval('scrollerSettings.bottomBoundaryTimeout') ? VIEWPORT_DEFAULT_SETTINGS.bottomBoundaryTimeout
+            bufferTopPadding: @scope.$eval('scrollerSettings.bufferTopPadding') ? VIEWPORT_DEFAULT_SETTINGS.bufferTopPadding
+            bufferBottomPadding: @scope.$eval('scrollerSettings.bufferBottomPadding') ? VIEWPORT_DEFAULT_SETTINGS.bufferBottomPadding
         if @_settings?.autoUpdateInterval != new_settings.autoUpdateInterval
             @_changeAutoUpdateInterval(new_settings.autoUpdateInterval)
         @_settings = new_settings
@@ -79,14 +87,32 @@ class ScrollerViewport
         window.clearInterval(@_autoUpdateHandler) if @_autoUpdateHandler?
         @_autoUpdateHandler = window.setInterval(@_updateStateAsync, interval)
 
+    _canRequestMoreTopItems: =>
+        now = new Date()
+        return not (@_buffer.start == @_topBoundaryIndex &&
+            (now - @_topBoundaryIndexTimestamp < @_settings.topBoundaryTimeout))
+
     _requestMoreTopItems: =>
         return if @_requesting_top_items
         @_requesting_top_items = true
-        start = @_buffer.start - @_settings.itemsPerReqeust
+        start = @_buffer.start - @_settings.itemsPerRequest
+        end = @_buffer.start
         @_getItems start, @_settings.itemsPerRequest, (err, res) =>
             @_requesting_top_items = false
-            if !err
+            return if err
+            if res.length == 0
+                @_topBoundaryIndex = end
+                @_topBoundaryIndexTimestamp = new Date()
+            else
                 @_buffer.addItemsToStart(res)
+                if @_buffer.start < @_topBoundaryIndex
+                    @_topBoundaryIndex = null
+                @_updateStateAsync()
+
+    _canRequestMoreBottomItems: =>
+        now = new Date()
+        return not (@_buffer.start + @_buffer.length == @_bottomBoundaryIndex &&
+            (now - @_bottomBoundaryIndexTimestamp < @_settings.bottomBoundaryTimeout))
 
     _requestMoreBottomItems: =>
         return if @_requesting_bottom_items
@@ -94,9 +120,15 @@ class ScrollerViewport
         start = @_buffer.start + @_buffer.length
         @_getItems start, @_settings.itemsPerRequest, (err, res) =>
             @_requesting_bottom_items = false
-            if !err
+            return if err
+            if res.length == 0
+                @_bottomBoundaryIndex = start
+                @_bottomBoundaryIndexTimestamp = new Date()
+            else
                 @_buffer.addItemsToEnd(res)
-            @_updateStateAsync()
+                if @_buffer.start + @_buffer.length > @_bottomBoundaryIndex
+                    @_bottomBoundaryIndex = null
+                @_updateStateAsync()
 
     _updateStateAsync: =>
         return if @_updatePlanned
@@ -135,14 +167,21 @@ class ScrollerViewport
         @scope.$broadcast('bottom-item-rendered', item)
         @_updateStateAsync()
 
+    _truncateBuffer: =>
+        bufferMinStart = @_drawnItems[0].index - @_settings.bufferTopPadding
+        bufferMaxEnd = @_drawnItems[@_drawnItems.length - 1].index + @_settings.bufferBottomPadding
+        @_buffer.truncateTo(bufferMinStart, bufferMaxEnd)
+
     _removeTopDrawnItem: =>
         @_drawnItems = @_drawnItems[1..]
         @scope.$broadcast('top-item-removed')
+        @_truncateBuffer()
         @_updateStateAsync()
 
     _removeBottomDrawnItem: =>
         @_drawnItems.pop()
         @scope.$broadcast('bottom-item-removed')
+        @_truncateBuffer()
         @_updateStateAsync()
 
     _tryDrawTopItem: =>
@@ -152,7 +191,7 @@ class ScrollerViewport
             neededIndex = -1
         if neededIndex of @_buffer
             @_addTopDrawnItem({index: neededIndex, data: @_buffer[neededIndex]})
-        else
+        else if @_canRequestMoreTopItems()
             @_requestMoreTopItems()
 
     _tryDrawBottomItem: =>
@@ -162,7 +201,7 @@ class ScrollerViewport
             neededIndex = 0
         if neededIndex of @_buffer
             @_addBottomDrawnItem({index: neededIndex, data: @_buffer[neededIndex]})
-        else
+        else if @_canRequestMoreBottomItems()
             @_requestMoreBottomItems()
 
     preserveScroll: (action) =>

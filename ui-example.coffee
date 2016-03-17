@@ -3,7 +3,10 @@ angular.module('application', ['ui.scroller'])
         $scope.data = ("Line #{i}" for i in [1..100])
         $scope.getData = (index, count, callback) ->
             window.setTimeout ->
-                callback(null, $scope.data[index...index+count])
+                end = index + count
+                index = Math.max(index, 0)
+                end = Math.max(end, 0)
+                callback(null, $scope.data[index...end])
             , 0
         $scope.scrollerViewportSettings =
             paddingTop:
