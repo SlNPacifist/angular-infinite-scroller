@@ -4,7 +4,7 @@ angular.module('application', ['ui.scroller'])
         $scope.getData = (index, count, callback) ->
             window.setTimeout ->
                 callback(null, $scope.data[index...index+count])
-            , 1000
+            , 0
     ]
 
 angular.bootstrap(document, ["application"])

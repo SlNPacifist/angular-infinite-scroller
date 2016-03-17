@@ -6,35 +6,6 @@ insertAfter = (element, target) ->
     else
         parent.appendChild(element)
 
-removeRenderedElements = (elements_to_delete) ->
-    for _, item of elements_to_delete
-        item.node.remove()
-        item.scope.$destroy()
-
-updateRenderedElements = (prev_elements, next_elements) ->
-    new_rendered_elements = {}
-    rendered_elements_to_delete = []
-    for data in next_elements
-        i = data.index
-        if data.index of prev_elements
-            new_rendered_elements[i] = prev_elements[i]
-            delete prev_elements[i]
-        else
-            new_rendered_elements[i] = {scope: null, clone: null, data: data}
-    new_rendered_elements
-
-updateElementsDOM = (insert_point, rendered_elements, $transclude) ->
-    for _, item of rendered_elements
-        if item.scope
-            insertAfter(item.node, insert_point)
-        else
-            $transclude (node, scope) ->
-                item.scope = scope
-                item.node = node[0]
-                item.scope.scrData = item.data
-                insertAfter(item.node, insert_point)
-        insert_point = item.node
-
 
 class Buffer
     constructor: ->
@@ -64,23 +35,23 @@ class Buffer
             @[@start + idx] = item
         @length += items.length
 
-
 class ScrollerViewport
-    constructor: (@_scope, @_element) ->
+    constructor: (@scope, @_element) ->
         @_settings =
             paddingTop:
-                min: 20
-                max: 100
+                min: 100
+                max: 150
             paddingBottom:
-                min: 20
-                max: 100
+                min: 100
+                max: 150
             itemsPerRequest: 10
         @_requesting_top_items = false
         @_requesting_bottom_items = false
-        @_getItems = @_scope.scrollerSource.bind(@)
-        @_watchHandler = window.setInterval(@_updateState, 1000)
+        @_getItems = @scope.scrollerSource.bind(@)
+        @_watchHandler = window.setInterval(@_updateStateAsync, 1000)
+        @_updateStateAsync()
+        @_element.addEventListener('scroll', @_updateStateAsync)
         @_drawnItems = []
-        @_scope.list = @_drawnItems
         @_buffer = new Buffer
 
     _requestMoreTopItems: =>
@@ -100,12 +71,28 @@ class ScrollerViewport
             @_requesting_bottom_items = false
             if !err
                 @_buffer.addItemsToEnd(res)
+            @_updateStateAsync()
+
+    _updateStateAsync: =>
+        return if @_updatePlanned
+        @_updatePlanned = true
+        setTimeout =>
+            @_updatePlanned = false
+            @_updateState()
+        , 0
 
     _updateState: =>
-        if @_element.scrollTop > @_settings.paddingTop.max
-            @_removeTopDrawnItem()
-        else if @_element.scrollTop < @_settings.paddingTop.min
-            @_tryDrawTopItem()
+        now = new Date()
+        if @_element.scrollTop == @_lastScrollTop && now - @_lastScrollTopChange > 100
+            if @_element.scrollTop > @_settings.paddingTop.max
+                @_removeTopDrawnItem()
+            else if @_element.scrollTop < @_settings.paddingTop.min
+                @_tryDrawTopItem()
+        else
+            if @_element.scrollTop != @_lastScrollTop
+                @_lastScrollTop = @_element.scrollTop
+                @_lastScrollTopChange = now
+            @_updateStateAsync()
 
         paddingBottom = @_element.scrollHeight - @_element.scrollTop - @_element.offsetHeight
         if paddingBottom < @_settings.paddingBottom.min
@@ -113,22 +100,25 @@ class ScrollerViewport
         else if paddingBottom > @_settings.paddingBottom.max
             @_removeBottomDrawnItem()
 
-    _updateDrawnItems: (@_drawnItems) =>
-        @_scope.$apply =>
-            @_scope.list = @_drawnItems
-            window.setTimeout(@_updateState, 0)
-
     _addTopDrawnItem: (item) =>
-        @_updateDrawnItems([item].concat(@_drawnItems))
+        @_drawnItems = [item].concat(@_drawnItems)
+        @scope.$broadcast('top-item-rendered', item)
+        @_updateStateAsync()
 
     _addBottomDrawnItem: (item) =>
-        @_updateDrawnItems(@_drawnItems.concat(item))
+        @_drawnItems.push(item)
+        @scope.$broadcast('bottom-item-rendered', item)
+        @_updateStateAsync()
 
     _removeTopDrawnItem: =>
-        @_updateDrawnItems(@_drawnItems[1..])
+        @_drawnItems = @_drawnItems[1..]
+        @scope.$broadcast('top-item-removed')
+        @_updateStateAsync()
 
     _removeBottomDrawnItem: =>
-        @_updateDrawnItems(@_drawnItems[...-1])
+        @_drawnItems.pop()
+        @scope.$broadcast('bottom-item-removed')
+        @_updateStateAsync()
 
     _tryDrawTopItem: =>
         if @_drawnItems.length > 0
@@ -150,6 +140,58 @@ class ScrollerViewport
         else
             @_requestMoreBottomItems()
 
+    preserveScroll: (action) =>
+        heightBefore = @_element.scrollHeight
+        action()
+        delta = @_element.scrollHeight - heightBefore
+        @_element.scrollTop += delta
+        @_lastScrollTop = @_element.scrollTop
+
+
+class ScrollerItemList
+    constructor: (@_$element, @_viewportController, @_$transclude) ->
+        @_renderedItems = []
+        @_viewportController.scope.$on('top-item-rendered', @_addTopItem)
+        @_viewportController.scope.$on('bottom-item-rendered', @_addBottomItem)
+        @_viewportController.scope.$on('top-item-removed', @_removeTopItem)
+        @_viewportController.scope.$on('bottom-item-removed', @_removeBottomItem)
+
+    _createItem: (data, insert_point) =>
+        item = {scope: null, clone: null, data: data}
+        @_$transclude (node, scope) ->
+            item.scope = scope
+            item.scope.$applyAsync ->
+                item.scope.scrData = item.data
+            item.clone = node[0]
+            insertAfter(item.clone, insert_point)
+        item
+
+    _destroyItem: (item) =>
+        item.clone.remove()
+        item.scope.$destroy()
+
+    _addTopItem: (_, data) =>
+        @_viewportController.preserveScroll =>
+            @_renderedItems.unshift(@_createItem(data, @_$element[0]))
+
+    _addBottomItem: (_, data) =>
+        if @_renderedItems.length > 0
+            insert_point = @_renderedItems[@_renderedItems.length - 1].clone
+        else
+            insert_point = @_$element[0]
+        @_renderedItems.push(@_createItem(data, insert_point))
+
+    _removeTopItem: =>
+        return if @_renderedItems.length == 0
+        @_viewportController.preserveScroll =>
+            @_destroyItem(@_renderedItems.shift())
+
+    _removeBottomItem: =>
+        return if @_renderedItems.length == 0
+        lastItem = @_renderedItems.pop()
+        selection = window.getSelection()
+        @_destroyItem(lastItem)
+
 
 angular.module('ui.scroller', [])
 
@@ -157,12 +199,8 @@ angular.module('ui.scroller', [])
     restrict: 'A'
     transclude: true
     scope: {'scrollerSource': '='}
-    controller: ['$scope', ($scope) ->
-        @$scope = $scope
-        return null # Anything returned here will be used instead of controller
-    ]
-    link: ($scope, $element, $attrs) ->
-        port = new ScrollerViewport($scope, $element[0])
+    controller: ($scope, $element) ->
+        new ScrollerViewport($scope, $element[0])
 
 .directive 'scrollerItem', ->
     restrict: 'A'
@@ -170,9 +208,4 @@ angular.module('ui.scroller', [])
     transclude: 'element'
     scope: {}
     link: ($scope, $element, $attrs, viewportCtrl, $transclude) ->
-        rendered_elements = {}
-        viewportCtrl.$scope.$watch 'list', (value) ->
-            new_rendered_elements = updateRenderedElements(rendered_elements, value)
-            removeRenderedElements(rendered_elements)
-            rendered_elements = new_rendered_elements
-            updateElementsDOM($element[0], rendered_elements, $transclude)
+        new ScrollerItemList($element, viewportCtrl, $transclude)
