@@ -1,12 +1,26 @@
 {
-  "name": "scroller",
+  "name": "angular-infinite-scroller",
   "description": "Infinite scroll for angular.js",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "license": "MIT",
   "private": true,
   "dependencies": {
-    "angular": "^1.5.0",
-    "angular-route": "^1.5.0",
-    "angular-resource": "^1.5.0"
-  }
+    "angular": "*"
+  },
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components"
+  ],
+  "authors": [
+    {"name": "Slava Baginov", "email": "slnpacifist@gmail.com"}
+  ],
+  "keywords": [
+    "angular",
+    "angularjs",
+    "infinite",
+    "scroll",
+    "scroller",
+    "scrolling"
+  ]
 }
