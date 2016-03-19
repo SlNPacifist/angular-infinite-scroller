@@ -258,7 +258,7 @@ class ScrollerItemList
         @_destroyItem(lastItem)
 
 
-angular.module('ui.scroller', [])
+angular.module('scroller', [])
 
 .directive 'scrollerViewport', ->
     restrict: 'A'

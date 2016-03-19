@@ -1,4 +1,4 @@
-angular.module('application', ['ui.scroller'])
+angular.module('application', ['scroller'])
     .controller 'mainController', [ '$scope', ($scope)->
         $scope.data = ("Line number #{i}, text is long enough" for i in [1..100])
         $scope.getData = (index, count, callback) ->
