@@ -224,10 +224,11 @@ class ScrollerItemList
         item = {scope: null, clone: null, data: data}
         @_$transclude (node, scope) ->
             item.scope = scope
-            item.scope.$applyAsync ->
-                item.scope.scrData = item.data
             item.clone = node[0]
             insertAfter(item.clone, insert_point)
+        # Data should be applied after transclusion, otherwise item won't see changes
+        item.scope.$apply ->
+            item.scope.scrData = item.data
         item
 
     _destroyItem: (item) =>
@@ -268,6 +269,7 @@ angular.module('ui.scroller', [])
 
 .directive 'scrollerItem', ->
     restrict: 'A'
+    priority: 1000
     require: '^^scrollerViewport'
     transclude: 'element'
     scope: {}

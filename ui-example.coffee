@@ -1,6 +1,6 @@
 angular.module('application', ['ui.scroller'])
     .controller 'mainController', [ '$scope', ($scope)->
-        $scope.data = ("Line #{i}" for i in [1..100])
+        $scope.data = ("Line number #{i}, text is long enough" for i in [1..100])
         $scope.getData = (index, count, callback) ->
             window.setTimeout ->
                 end = index + count
