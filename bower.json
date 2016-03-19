@@ -4,11 +4,11 @@
   "version": "0.0.1",
   "license": "MIT",
   "private": true,
-  "dependencies": {
-    "angular": "*"
+  "devDependencies": {
+    "angular": "^1.5",
+    "coffee-script": "^1.10"
   },
   "ignore": [
-    "**/.*",
     "node_modules",
     "bower_components"
   ],
