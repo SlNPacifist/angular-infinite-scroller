@@ -4,13 +4,13 @@ About this package
 Infinite scrolling is a very tricky area. Different packages solve problems of infinite scroll in
 different ways, this package uses its own way.
 
-###Description
+### Description
 
 **Scroller** is an [angular.js 1](https://angularjs.org/) directive. It is used much like ngRepeat
 directive: every element of collection instantiates a template. Unlike ngRepeat, data source is a
 function that can load data in small parts when needed.
 
-###Usage
+### Usage
 
 Include minified scroller file in your template:
 
@@ -60,6 +60,7 @@ render parts of your items in different parts of viewport.
 should contain `count` items starting with `index`.
 
 ### Known issues
+
 Scroller does not intercept any events, so all the scrolling should work just like it is meant to
 work in the operating system. However, elements far from shown area are deleted so keys like
 pgUp/pgDown do not function properly. For example:
@@ -69,6 +70,11 @@ pgUp/pgDown do not function properly. For example:
 * selected DOM Node is removed
 * pgUp does not work anymore
 
-###Dependencies
+### Dependencies
 
 Scroller only requires angular.js. No need to install jQuery or other libraries.
+
+### Development
+
+If you want to dive into source code, compiled documentation can be found at
+[github pages](https://slnpacifist.github.io/angular-infinite-scroller/docs/scroller.html)
