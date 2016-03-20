@@ -2,7 +2,11 @@ module.exports = (grunt) ->
     grunt.loadNpmTasks 'grunt-coffeelint'
     grunt.loadNpmTasks 'grunt-contrib-coffee'
     grunt.loadNpmTasks 'grunt-contrib-uglify'
+    grunt.loadNpmTasks('grunt-docco')
+    grunt.loadNpmTasks('grunt-github-pages')
     grunt.registerTask('build', ['coffeelint', 'coffee', 'uglify'])
+    grunt.registerTask('compile-docs', ['coffeelint', 'docco'])
+    grunt.registerTask('upload-docs', ['compile-docs', 'githubPages'])
     grunt.initConfig
         pkg: grunt.file.readJSON 'package.json'
         coffeelint:
@@ -34,3 +38,13 @@ module.exports = (grunt) ->
             dist:
                 src: ['dist/scroller.js']
                 dest: 'dist/scroller.min.js'
+        docco:
+            publish:
+                src: ['src/**/*.coffee'],
+                options:
+                  output: '../scroller-pages/docs/'
+        githubPages:
+            publish:
+                options:
+                    commitMessage: 'Auto documentation update'
+                src: '../scroller-pages'
