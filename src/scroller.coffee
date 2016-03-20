@@ -262,7 +262,6 @@ angular.module('scroller', [])
 
 .directive 'scrollerViewport', ->
     restrict: 'A'
-    transclude: true
     scope: {'scrollerSource': '=', 'scrollerSettings': '='}
     controller: ($scope, $element) ->
         new ScrollerViewport($scope, $element[0])

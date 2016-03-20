@@ -414,7 +414,6 @@
   angular.module('scroller', []).directive('scrollerViewport', function() {
     return {
       restrict: 'A',
-      transclude: true,
       scope: {
         'scrollerSource': '=',
         'scrollerSettings': '='
