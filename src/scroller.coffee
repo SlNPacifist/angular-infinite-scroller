@@ -56,7 +56,7 @@ class ScrollerViewport
     constructor: (@scope, @_element) ->
         @_updateSettings()
         @scope.$watch('scrollerSettings', @_updateSettings, true)
-        @_getItems = @scope.scrollerSource.bind(@)
+        @_getItems = @scope.scrollerSource.bind(this)
         @_drawnItems = []
         @_buffer = new Buffer()
         @_requesting_top_items = false
@@ -231,7 +231,7 @@ class ScrollerItemList
             item.scope.scrData = item.data
         item
 
-    _destroyItem: (item) =>
+    _destroyItem: (item) ->
         item.clone.remove()
         item.scope.$destroy()
 
