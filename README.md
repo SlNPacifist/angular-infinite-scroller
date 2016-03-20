@@ -59,6 +59,15 @@ render parts of your items in different parts of viewport.
     * `res` should be an array. Items of this array will become scrData.data in scroller-item. `res`
 should contain `count` items starting with `index`.
 
+### Known issues
+Scroller does not intercept any events, so all the scrolling should work just like it is meant to
+work in the operating system. However, elements far from shown area are deleted so keys like
+pgUp/pgDown do not function properly. For example:
+
+* user clicks in the scroller area
+* user presses pgUp several times
+* selected DOM Node is removed
+* pgUp does not work anymore
 
 ###Dependencies
 
