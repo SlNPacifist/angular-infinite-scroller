@@ -430,7 +430,9 @@ updates. <code>@_updateStateAsync</code> makes sure only one update is performed
                 <a class="pilcrow" href="#section-22">&#182;</a>
               </div>
               <h2 id="-section-id-scrollerviewport-_trydrawtopitem-section-"><section id='ScrollerViewport._tryDrawTopItem'></section></h2>
-<p>Either render existing item or request more items from the top.</p>
+<p>Either render existing item or request more items from the top. Note that if no data available
+then more data is requested, but no rendering will happen when data arrives.
+<code>@_updateStateAsync</code> is called when data arrives.</p>
 
             </div>
             
@@ -575,20 +577,25 @@ adding or removing of top items and compensate difference.</p>
 <p><code>ScrollerItemList</code> is <code>angular.js</code> controller. It manages list of items currently rendered in
 viewport.</p>
 <p>Class state flow is very simple. Once instantiated, object of this class listens to viewport
-events (commands) using angular.js scope for adding/removing top or bottom items.</p>
+events (commands) using angular.js scope for adding/removing top or bottom items.
+Adds new properties to scope:</p>
+<ul>
+<li>scrIndex: global index of rendered item</li>
+<li>scrData: data received from source function</li>
+</ul>
 
             </div>
             
             <div class="content"><div class='highlight'><pre><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ScrollerItemList</span></span>
     constructor: <span class="hljs-function"><span class="hljs-params">(@_$element, @_viewportController, @_$transclude)</span> -&gt;</span>
         @_renderedItems = []
-        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'top-item-rendered'</span>, @_addTopItem)
-        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'bottom-item-rendered'</span>, @_addBottomItem)
+        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'top-item-rendered'</span>, <span class="hljs-function"><span class="hljs-params">(_, source)</span> =&gt;</span> @_addTopItem(source))
+        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'bottom-item-rendered'</span>, <span class="hljs-function"><span class="hljs-params">(_, source)</span> =&gt;</span> @_addBottomItem(source))
         @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'top-item-removed'</span>, @_removeTopItem)
         @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'bottom-item-removed'</span>, @_removeBottomItem)
 
-    _createItem: <span class="hljs-function"><span class="hljs-params">(data, insert_point)</span> =&gt;</span>
-        item = {scope: <span class="hljs-literal">null</span>, clone: <span class="hljs-literal">null</span>, data: data}
+    _createItem: <span class="hljs-function"><span class="hljs-params">(source, insert_point)</span> =&gt;</span>
+        item = {scope: <span class="hljs-literal">null</span>, clone: <span class="hljs-literal">null</span>}
         @_$transclude (node, scope) -&gt;
             item.scope = scope
             item.clone = node[<span class="hljs-number">0</span>]
@@ -608,23 +615,24 @@ events (commands) using angular.js scope for adding/removing top or bottom items
             </div>
             
             <div class="content"><div class='highlight'><pre>        item.scope.$apply -&gt;
-            item.scope.scrData = item.data
+            item.scope.scrIndex = source.index
+            item.scope.scrData = source.data
         item
 
     _destroyItem: <span class="hljs-function"><span class="hljs-params">(item)</span> -&gt;</span>
         item.clone.remove()
         item.scope.$destroy()
 
-    _addTopItem: <span class="hljs-function"><span class="hljs-params">(_, data)</span> =&gt;</span>
+    _addTopItem: <span class="hljs-function"><span class="hljs-params">(source)</span> =&gt;</span>
         @_viewportController.preserveScroll =&gt;
-            @_renderedItems.unshift(@_createItem(data, @_$element[<span class="hljs-number">0</span>]))
+            @_renderedItems.unshift(@_createItem(source, @_$element[<span class="hljs-number">0</span>]))
 
-    _addBottomItem: <span class="hljs-function"><span class="hljs-params">(_, data)</span> =&gt;</span>
+    _addBottomItem: <span class="hljs-function"><span class="hljs-params">(source)</span> =&gt;</span>
         <span class="hljs-keyword">if</span> @_renderedItems.length &gt; <span class="hljs-number">0</span>
             insert_point = @_renderedItems[@_renderedItems.length - <span class="hljs-number">1</span>].clone
         <span class="hljs-keyword">else</span>
             insert_point = @_$element[<span class="hljs-number">0</span>]
-        @_renderedItems.push(@_createItem(data, insert_point))
+        @_renderedItems.push(@_createItem(source, insert_point))
 
     _removeTopItem: <span class="hljs-function">=&gt;</span>
         <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_renderedItems.length == <span class="hljs-number">0</span>
@@ -686,10 +694,8 @@ truncating stored items.</p>
               </div>
               <h2 id="-section-id-buffer-requestmoretopitems-section-"><section id='Buffer.requestMoreTopItems'></section></h2>
 <p>Only one request of top items may be active at a time. That ensures that multiple actions like
-“scroll to bottom and back to top” does not make multiple requests. Note that no rendering
-happens when data arrives. Data is added to the buffer and <code>@_updateStateAsync</code> is called.
-Errors in data source callback are ignored, but they do not forbid further requests of top
-items.</p>
+“scroll to bottom and back to top” does not make multiple requests. Errors in data source
+callback are ignored, they do not forbid further requests of top items.</p>
 
             </div>
             
