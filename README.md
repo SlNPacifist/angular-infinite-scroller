@@ -1,5 +1,4 @@
-About this package
-------------------
+###  About this package
 
 Infinite scrolling is a very tricky area. Different packages solve problems of infinite scroll in
 different ways, this package uses its own way.
@@ -8,7 +7,9 @@ different ways, this package uses its own way.
 
 **Scroller** is an [angular.js 1](https://angularjs.org/) directive. It is used much like ngRepeat
 directive: every element of collection instantiates a template. Unlike ngRepeat, data source is a
-function that can load data in small parts when needed.
+function that can load data in small parts when needed. Also, ngRepeat watches for content changes
+while Scroller assumes data in collection is never changed (items can only be added on both sides
+of collection).
 
 ### Usage
 
