@@ -34,7 +34,7 @@
   };
 
   ScrollerViewport = (function() {
-    function ScrollerViewport(scope1, _element, scrollerSource, settings) {
+    function ScrollerViewport(scope1, _element, source, settings) {
       this.scope = scope1;
       this._element = _element;
       if (settings == null) {
@@ -51,10 +51,11 @@
       this._updateStateAsync = bind(this._updateStateAsync, this);
       this._updateState = bind(this._updateState, this);
       this._changeAutoUpdateInterval = bind(this._changeAutoUpdateInterval, this);
+      this.updateSource = bind(this.updateSource, this);
       this.updateSettings = bind(this.updateSettings, this);
       this._settings = angular.merge(settings, VIEWPORT_DEFAULT_SETTINGS);
       this._drawnItems = [];
-      this._buffer = new Buffer(scrollerSource, this._settings.buffer);
+      this._buffer = new Buffer(source, this._settings.buffer);
       this._updateStateAsync();
       this._element.addEventListener('scroll', this._updateStateAsync);
       this._changeAutoUpdateInterval(this._settings.autoUpdateInterval);
@@ -70,6 +71,13 @@
       }
       this._settings = settings;
       return this._buffer.updateSettings(this._settings.buffer);
+    };
+
+    ScrollerViewport.prototype.updateSource = function(source) {
+      this._buffer.destroy();
+      this._buffer = new Buffer(source, this._settings.buffer);
+      this._drawnItems = [];
+      return this.scope.$broadcast('clear');
     };
 
     ScrollerViewport.prototype._changeAutoUpdateInterval = function(interval) {
@@ -152,13 +160,13 @@
 
     ScrollerViewport.prototype._addTopDrawnItem = function(item) {
       this._drawnItems = [item].concat(this._drawnItems);
-      this.scope.$broadcast('top-item-rendered', item);
+      this.scope.$broadcast('render-top-item', item);
       return this._updateStateAsync();
     };
 
     ScrollerViewport.prototype._addBottomDrawnItem = function(item) {
       this._drawnItems.push(item);
-      this.scope.$broadcast('bottom-item-rendered', item);
+      this.scope.$broadcast('render-bottom-item', item);
       return this._updateStateAsync();
     };
 
@@ -171,14 +179,14 @@
 
     ScrollerViewport.prototype._removeTopDrawnItem = function() {
       this._drawnItems = this._drawnItems.slice(1);
-      this.scope.$broadcast('top-item-removed');
+      this.scope.$broadcast('remove-top-item');
       this._truncateBuffer();
       return this._updateStateAsync();
     };
 
     ScrollerViewport.prototype._removeBottomDrawnItem = function() {
       this._drawnItems.pop();
-      this.scope.$broadcast('bottom-item-removed');
+      this.scope.$broadcast('remove-bottom-item');
       this._truncateBuffer();
       return this._updateStateAsync();
     };
@@ -203,24 +211,26 @@
       this._$element = _$element;
       this._viewportController = _viewportController;
       this._$transclude = _$transclude;
+      this._clear = bind(this._clear, this);
       this._removeBottomItem = bind(this._removeBottomItem, this);
       this._removeTopItem = bind(this._removeTopItem, this);
       this._addBottomItem = bind(this._addBottomItem, this);
       this._addTopItem = bind(this._addTopItem, this);
       this._createItem = bind(this._createItem, this);
       this._renderedItems = [];
-      this._viewportController.scope.$on('top-item-rendered', (function(_this) {
+      this._viewportController.scope.$on('render-top-item', (function(_this) {
         return function(_, source) {
           return _this._addTopItem(source);
         };
       })(this));
-      this._viewportController.scope.$on('bottom-item-rendered', (function(_this) {
+      this._viewportController.scope.$on('render-bottom-item', (function(_this) {
         return function(_, source) {
           return _this._addBottomItem(source);
         };
       })(this));
-      this._viewportController.scope.$on('top-item-removed', this._removeTopItem);
-      this._viewportController.scope.$on('bottom-item-removed', this._removeBottomItem);
+      this._viewportController.scope.$on('remove-top-item', this._removeTopItem);
+      this._viewportController.scope.$on('remove-bottom-item', this._removeBottomItem);
+      this._viewportController.scope.$on('clear', this._clear);
     }
 
     ScrollerItemList.prototype._createItem = function(source, insert_point) {
@@ -276,12 +286,20 @@
     };
 
     ScrollerItemList.prototype._removeBottomItem = function() {
-      var lastItem;
       if (this._renderedItems.length === 0) {
         return;
       }
-      lastItem = this._renderedItems.pop();
-      return this._destroyItem(lastItem);
+      return this._destroyItem(this._renderedItems.pop());
+    };
+
+    ScrollerItemList.prototype._clear = function() {
+      var item, j, len, ref;
+      ref = this._renderedItems;
+      for (j = 0, len = ref.length; j < len; j++) {
+        item = ref[j];
+        this._destroyItem(item);
+      }
+      return this._renderedItems = [];
     };
 
     return ScrollerItemList;
@@ -292,6 +310,7 @@
     function Buffer(_getItems, _settings) {
       this._getItems = _getItems;
       this._settings = _settings;
+      this.destroy = bind(this.destroy, this);
       this.truncateTo = bind(this.truncateTo, this);
       this._endOfDataReached = bind(this._endOfDataReached, this);
       this.requestMoreBottomItems = bind(this.requestMoreBottomItems, this);
@@ -425,6 +444,11 @@
       }
     };
 
+    Buffer.prototype.destroy = function() {
+      this._topItemsRequestId = null;
+      return this._bottomItemsRequestId = null;
+    };
+
     return Buffer;
 
   })();
@@ -433,16 +457,24 @@
     return {
       restrict: 'A',
       scope: {
-        'scrollerSource': '=',
+        'scrollerViewport': '=',
         'scrollerSettings': '='
       },
       controller: function($scope, $element) {
-        var update_settings, viewportController;
-        viewportController = new ScrollerViewport($scope, $element[0], $scope.scrollerSource, $scope.scrollerSettings);
+        var oldSource, update_settings, viewportController;
+        viewportController = new ScrollerViewport($scope, $element[0], $scope.scrollerViewport, $scope.scrollerSettings);
         update_settings = function() {
           return viewportController.updateSettings($scope.scrollerSettings);
         };
         $scope.$watch('scrollerSettings', update_settings, true);
+        oldSource = $scope.scrollerViewport;
+        $scope.$watch('scrollerViewport', function() {
+          if (oldSource === $scope.scrollerViewport) {
+            return;
+          }
+          oldSource = $scope.scrollerViewport;
+          return viewportController.updateSource($scope.scrollerViewport);
+        });
         return viewportController;
       }
     };
