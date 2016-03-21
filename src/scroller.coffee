@@ -145,7 +145,9 @@ class ScrollerViewport
         , 0
 
     # ## <section id='ScrollerViewport._tryDrawTopItem'></section>
-    # Either render existing item or request more items from the top.
+    # Either render existing item or request more items from the top. Note that if no data available
+    # then more data is requested, but no rendering will happen when data arrives.
+    # `@_updateStateAsync` is called when data arrives.
     _tryDrawTopItem: =>
         if @_drawnItems.length > 0
             neededIndex = @_drawnItems[0].index - 1
@@ -302,10 +304,8 @@ class Buffer
 
     # ## <section id='Buffer.requestMoreTopItems'></section>
     # Only one request of top items may be active at a time. That ensures that multiple actions like
-    # "scroll to bottom and back to top" does not make multiple requests. Note that no rendering
-    # happens when data arrives. Data is added to the buffer and `@_updateStateAsync` is called.
-    # Errors in data source callback are ignored, but they do not forbid further requests of top
-    # items.
+    # "scroll to bottom and back to top" does not make multiple requests. Errors in data source
+    # callback are ignored, they do not forbid further requests of top items.
     requestMoreTopItems: (quantity, callback) =>
         return if @_top_items_request_id?
         return if @_beginOfDataReached()
