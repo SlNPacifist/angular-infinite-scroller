@@ -12,6 +12,7 @@
     "node_modules",
     "bower_components"
   ],
+  "main": ["src/scroller.coffee"],
   "authors": [
     {"name": "Slava Baginov", "email": "slnpacifist@gmail.com"}
   ],
