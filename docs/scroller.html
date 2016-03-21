@@ -29,7 +29,7 @@
               </div>
               <h3 id="code-conventions-">Code conventions:</h3>
 <ul>
-<li>Class members starting with underscore are considered <strong>private</strong> and should not be accessed</li>
+<li>Class members starting with underscore are <strong>private</strong> and should not be accessed</li>
 <li>Other class members are <strong>read-only</strong></li>
 <li>All the changes to class should be done using public methods</li>
 </ul>
@@ -45,7 +45,8 @@
               <div class="pilwrap ">
                 <a class="pilcrow" href="#section-2">&#182;</a>
               </div>
-              <p>Default settings for viewport. If any setting is not listed in scope, it will be copied from this
+              <h3 id="-section-id-viewport_default_settings-default-settings-section-"><section id='VIEWPORT_DEFAULT_SETTINGS'>Default settings</section></h3>
+<p>Default settings for viewport. If any setting is not listed in scope, it will be copied from this
 object.</p>
 
             </div>
@@ -85,8 +86,8 @@ is used in code.</p>
                 <a class="pilcrow" href="#section-4">&#182;</a>
               </div>
               <p>Number of items in every request. See
-<a href="#ScrollerViewport._requestMoreTopItems"><code>ScrollerViewport._requestMoreTopItems</code></a> and
-<a href="#ScrollerViewport._requestMoreBottomItems"><code>ScrollerViewport._requestMoreBottomItems</code></a></p>
+<a href="#ScrollerViewport._tryDrawTopItem"><code>ScrollerViewport._tryDrawTopItem</code></a> and
+<a href="#ScrollerViewport._tryDrawBottomItem"><code>ScrollerViewport._tryDrawBottomItem</code></a></p>
 
             </div>
             
@@ -134,13 +135,14 @@ otherwise. See
                 <a class="pilcrow" href="#section-7">&#182;</a>
               </div>
               <p>Number of milliseconds after which viewport will allow re-checking boundary of data. See
-<a href="#ScrollerViewport._beginOfDataReached"><code>ScrollerViewport._beginOfDataReached</code></a> and
-<a href="#ScrollerViewport._endOfDataReached"><code>ScrollerViewport._endOfDataReached</code></a> for details.</p>
+<a href="#Buffer._beginOfDataReached"><code>Buffer._beginOfDataReached</code></a> and
+<a href="#Buffer._endOfDataReached"><code>Buffer._endOfDataReached</code></a> for details.</p>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>    topBoundaryTimeout: <span class="hljs-number">10000</span>
-    bottomBoundaryTimeout: <span class="hljs-number">10000</span></pre></div></div>
+            <div class="content"><div class='highlight'><pre>    buffer:
+        topBoundaryTimeout: <span class="hljs-number">10000</span>
+        bottomBoundaryTimeout: <span class="hljs-number">10000</span></pre></div></div>
             
         </li>
         
@@ -179,11 +181,8 @@ rendered then buffer will keep data for items 37-89. See
                 <a class="pilcrow" href="#section-9">&#182;</a>
               </div>
               <h3 id="scroller-viewport">Scroller Viewport</h3>
-<p><code>ScrollerViewport</code> is <code>angular.js</code> controller. It solves two problems:</p>
-<ul>
-<li>makes decisions to render or delete items</li>
-<li>manages downloads of needed ranges of items</li>
-</ul>
+<p><code>ScrollerViewport</code> is <code>angular.js</code> controller. It tracks current state of bound element and makes
+decisions to ask for new items, render or delete items.</p>
 <p>Read <a href="#ScrollerViewport._updateState"><code>_updateState</code></a> documentation to understand this class state
 flow.</p>
 
@@ -200,13 +199,17 @@ flow.</p>
               <div class="pilwrap ">
                 <a class="pilcrow" href="#section-10">&#182;</a>
               </div>
-              <p><code>ScrollerViewport</code> only requires
-<a href="https://docs.angularjs.org/api/ng/type/$rootScope.Scope">angular.js scope</a>
-and bound DOM Node.</p>
+              <p><code>scope</code>: <a href="https://docs.angularjs.org/api/ng/type/$rootScope.Scope"><code>angular.js scope</code></a>. Used
+for communication with <a href="#ScrollerItemList">ScrollerItemList</a> througe events.</p>
+<p><code>element</code>: <code>DOM Node</code> bound to this viewport</p>
+<p><code>scrollerSource</code>: <code>function</code></p>
+<p><code>settings</code>: <code>object</code>. Settings object with structure similar to
+<a href="#VIEWPORT_DEFAULT_SETTINGS">default settings</a></p>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>    constructor: <span class="hljs-function"><span class="hljs-params">(@scope, @_element)</span> -&gt;</span></pre></div></div>
+            <div class="content"><div class='highlight'><pre>    constructor: <span class="hljs-function"><span class="hljs-params">(@scope, @_element, scrollerSource, settings={})</span> -&gt;</span>
+        @_settings = angular.merge(settings, VIEWPORT_DEFAULT_SETTINGS)</pre></div></div>
             
         </li>
         
@@ -216,40 +219,6 @@ and bound DOM Node.</p>
               
               <div class="pilwrap ">
                 <a class="pilcrow" href="#section-11">&#182;</a>
-              </div>
-              <p>Scope may contain <code>scrollerSettings</code> property which structure is similar to default
-settings.Properties that are not presented in scope.scrollerSettings will be filled with
-default settings. Settings are watched therefore any changes will be copied over to
-viewport.</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>        @_updateSettings()
-        @scope.$watch(<span class="hljs-string">'scrollerSettings'</span>, @_updateSettings, <span class="hljs-literal">true</span>)</pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-12">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-12">&#182;</a>
-              </div>
-              <p>Scope must contain function <code>scope.scrollerSource</code> which is a data source for viewport.</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>        @_getItems = @scope.scrollerSource.bind(<span class="hljs-keyword">this</span>)</pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-13">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-13">&#182;</a>
               </div>
               <p>Viewport keeps track of currently rendered items in format
 <code>{index: int, data: data_received_from_source_function}</code></p>
@@ -261,43 +230,26 @@ viewport.</p>
         </li>
         
         
-        <li id="section-14">
+        <li id="section-12">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-14">&#182;</a>
+                <a class="pilcrow" href="#section-12">&#182;</a>
               </div>
-              <p>Buffer contains data received from source function. It is used to store more data than
-rendered in case user wants to scroll back. However buffer size is limited.</p>
+              <p><a href="#Buffer"><code>Buffer</code></a> caches data from <code>scrollerSource</code></p>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>        @_buffer = <span class="hljs-keyword">new</span> Buffer()</pre></div></div>
+            <div class="content"><div class='highlight'><pre>        @_buffer = <span class="hljs-keyword">new</span> Buffer(scrollerSource, @_settings.buffer)</pre></div></div>
             
         </li>
         
         
-        <li id="section-15">
+        <li id="section-13">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-15">&#182;</a>
-              </div>
-              <p>Current state is tracked by these variables.</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>        @_requesting_top_items = <span class="hljs-literal">false</span>
-        @_requesting_bottom_items = <span class="hljs-literal">false</span></pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-16">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-16">&#182;</a>
+                <a class="pilcrow" href="#section-13">&#182;</a>
               </div>
               <p>First update to start the process. <code>scroll</code> event most likely will cause actions to
 perform. Finally, <code>_changeAutoUpdateInterval</code> function sets auto updates for any events
@@ -306,48 +258,24 @@ we do not track. Better later then never.</p>
             </div>
             
             <div class="content"><div class='highlight'><pre>        @_updateStateAsync()
-        @_element.addEventListener(<span class="hljs-string">'scroll'</span>, @_updateStateAsync)</pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-17">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-17">&#182;</a>
-              </div>
-              <p>Keeps track of settings changes.</p>
+        @_element.addEventListener(<span class="hljs-string">'scroll'</span>, @_updateStateAsync)
+        @_changeAutoUpdateInterval(@_settings.autoUpdateInterval)
 
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>    _updateSettings: <span class="hljs-function">=&gt;</span>
-        new_settings =
-            paddingTop:
-                min: @scope.$eval(<span class="hljs-string">'scrollerSettings.paddingTop.min'</span>) ? VIEWPORT_DEFAULT_SETTINGS.paddingTop.min
-                max: @scope.$eval(<span class="hljs-string">'scrollerSettings.paddingTop.max'</span>) ? VIEWPORT_DEFAULT_SETTINGS.paddingTop.max
-            paddingBottom:
-                min: @scope.$eval(<span class="hljs-string">'scrollerSettings.paddingBottom.min'</span>) ? VIEWPORT_DEFAULT_SETTINGS.paddingBottom.min
-                max: @scope.$eval(<span class="hljs-string">'scrollerSettings.paddingBottom.max'</span>) ? VIEWPORT_DEFAULT_SETTINGS.paddingBottom.max
-            itemsPerRequest: @scope.$eval(<span class="hljs-string">'scrollerSettings.itemsPerRequest'</span>) ? VIEWPORT_DEFAULT_SETTINGS.itemsPerRequest
-            autoUpdateInterval: @scope.$eval(<span class="hljs-string">'scrollerSettings.autoUpdateInterval'</span>) ? VIEWPORT_DEFAULT_SETTINGS.autoUpdateInterval
-            afterScrollWaitTime: @scope.$eval(<span class="hljs-string">'scrollerSettings.afterScrollWaitTime'</span>) ? VIEWPORT_DEFAULT_SETTINGS.afterScrollWaitTime
-            topBoundaryTimeout: @scope.$eval(<span class="hljs-string">'scrollerSettings.topBoundaryTimeout'</span>) ? VIEWPORT_DEFAULT_SETTINGS.topBoundaryTimeout
-            bottomBoundaryTimeout: @scope.$eval(<span class="hljs-string">'scrollerSettings.bottomBoundaryTimeout'</span>) ? VIEWPORT_DEFAULT_SETTINGS.bottomBoundaryTimeout
-            bufferTopPadding: @scope.$eval(<span class="hljs-string">'scrollerSettings.bufferTopPadding'</span>) ? VIEWPORT_DEFAULT_SETTINGS.bufferTopPadding
-            bufferBottomPadding: @scope.$eval(<span class="hljs-string">'scrollerSettings.bufferBottomPadding'</span>) ? VIEWPORT_DEFAULT_SETTINGS.bufferBottomPadding
-        <span class="hljs-keyword">if</span> @_settings?.autoUpdateInterval != new_settings.autoUpdateInterval
-            @_changeAutoUpdateInterval(new_settings.autoUpdateInterval)
-        @_settings = new_settings</pre></div></div>
+    updateSettings: <span class="hljs-function"><span class="hljs-params">(settings={})</span> =&gt;</span>
+        angular.merge(settings, VIEWPORT_DEFAULT_SETTINGS)
+        <span class="hljs-keyword">if</span> @_settings.autoUpdateInterval != settings.autoUpdateInterval
+            @_changeAutoUpdateInterval(settings.autoUpdateInterval)
+        @_settings = settings
+        @_buffer.updateSettings(@_settings.buffer)</pre></div></div>
             
         </li>
         
         
-        <li id="section-18">
+        <li id="section-14">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-18">&#182;</a>
+                <a class="pilcrow" href="#section-14">&#182;</a>
               </div>
               <h2 id="-section-id-scrollerviewport-_changeautoupdateinterval-section-"><section id='ScrollerViewport._changeAutoUpdateInterval'></section></h2>
 <p>Sets interval for auto updates. Auto update makes sure we do not miss special or untrackable
@@ -362,11 +290,11 @@ events.</p>
         </li>
         
         
-        <li id="section-19">
+        <li id="section-15">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-19">&#182;</a>
+                <a class="pilcrow" href="#section-15">&#182;</a>
               </div>
               <h2 id="-section-id-scrollerviewport-_updatestate-section-"><section id='ScrollerViewport._updateState'></section></h2>
 <p>Main function for this class. It performs measurements and makes decision on what to do.</p>
@@ -378,11 +306,11 @@ events.</p>
         </li>
         
         
-        <li id="section-20">
+        <li id="section-16">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-20">&#182;</a>
+                <a class="pilcrow" href="#section-16">&#182;</a>
               </div>
               <p>Firstly, check size of contents that is hidden on top. However, if you want to change
 top of rendered items, you have to make sure you won’t break current scrolling process.
@@ -402,11 +330,11 @@ time of measurement.</p>
         </li>
         
         
-        <li id="section-21">
+        <li id="section-17">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-21">&#182;</a>
+                <a class="pilcrow" href="#section-17">&#182;</a>
               </div>
               <p>Code here assumes changing <code>@_element.scrollTop</code> is safe</p>
 
@@ -421,11 +349,11 @@ time of measurement.</p>
         </li>
         
         
-        <li id="section-22">
+        <li id="section-18">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-22">&#182;</a>
+                <a class="pilcrow" href="#section-18">&#182;</a>
               </div>
               <p>Code here assumes changing <code>@_element.scrollTop</code> is not safe</p>
 
@@ -438,11 +366,11 @@ time of measurement.</p>
         </li>
         
         
-        <li id="section-23">
+        <li id="section-19">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-23">&#182;</a>
+                <a class="pilcrow" href="#section-19">&#182;</a>
               </div>
               <p>We wanted to updated state but could not do it due to scrolling. Plan update for the
 next tick.</p>
@@ -454,11 +382,11 @@ next tick.</p>
         </li>
         
         
-        <li id="section-24">
+        <li id="section-20">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-24">&#182;</a>
+                <a class="pilcrow" href="#section-20">&#182;</a>
               </div>
               <p>Unlike top, we can change bottom any time we need.</p>
 
@@ -473,11 +401,11 @@ next tick.</p>
         </li>
         
         
-        <li id="section-25">
+        <li id="section-21">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-25">&#182;</a>
+                <a class="pilcrow" href="#section-21">&#182;</a>
               </div>
               <p><code>@_updateState</code> should not be called directly since it could cause multiple simultaneous
 updates. <code>@_updateStateAsync</code> makes sure only one update is performed per tick.</p>
@@ -495,13 +423,14 @@ updates. <code>@_updateStateAsync</code> makes sure only one update is performed
         </li>
         
         
-        <li id="section-26">
+        <li id="section-22">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-26">&#182;</a>
+                <a class="pilcrow" href="#section-22">&#182;</a>
               </div>
-              <p>Either render existing item or request more items from the top.</p>
+              <h2 id="-section-id-scrollerviewport-_trydrawtopitem-section-"><section id='ScrollerViewport._tryDrawTopItem'></section></h2>
+<p>Either render existing item or request more items from the top.</p>
 
             </div>
             
@@ -513,18 +442,19 @@ updates. <code>@_updateStateAsync</code> makes sure only one update is performed
         <span class="hljs-keyword">if</span> neededIndex <span class="hljs-keyword">of</span> @_buffer
             @_addTopDrawnItem({index: neededIndex, data: @_buffer[neededIndex]})
         <span class="hljs-keyword">else</span>
-            @_requestMoreTopItems()</pre></div></div>
+            @_buffer.requestMoreTopItems(@_settings.itemsPerRequest, @_updateStateAsync)</pre></div></div>
             
         </li>
         
         
-        <li id="section-27">
+        <li id="section-23">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-27">&#182;</a>
+                <a class="pilcrow" href="#section-23">&#182;</a>
               </div>
-              <p>Either render existing item or request more items from the bottom.</p>
+              <h2 id="-section-id-scrollerviewport-_trydrawbottomitem-section-"><section id='ScrollerViewport._tryDrawBottomItem'></section></h2>
+<p>Either render existing item or request more items from the bottom.</p>
 
             </div>
             
@@ -536,151 +466,16 @@ updates. <code>@_updateStateAsync</code> makes sure only one update is performed
         <span class="hljs-keyword">if</span> neededIndex <span class="hljs-keyword">of</span> @_buffer
             @_addBottomDrawnItem({index: neededIndex, data: @_buffer[neededIndex]})
         <span class="hljs-keyword">else</span>
-            @_requestMoreBottomItems()</pre></div></div>
+            @_buffer.requestMoreBottomItems(@_settings.itemsPerRequest, @_updateStateAsync)</pre></div></div>
             
         </li>
         
         
-        <li id="section-28">
+        <li id="section-24">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-28">&#182;</a>
-              </div>
-              <h2 id="-section-id-scrollerviewport-_requestmoretopitems-section-"><section id='ScrollerViewport._requestMoreTopItems'></section></h2>
-<p>Only one request of top items may be active at a time. That ensures that multiple actions like
-“scroll to bottom and back to top” does not make multiple requests. Note that no rendering
-happens when data arrives. Data is added to the buffer and <code>@_updateStateAsync</code> is called.
-Errors in data source callback are ignored, but the do not fobid furhter requests of top
-items.</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>    _requestMoreTopItems: <span class="hljs-function">=&gt;</span>
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_requesting_top_items
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> @_beginOfDataReached()
-        @_requesting_top_items = <span class="hljs-literal">true</span>
-        start = @_buffer.start - @_settings.itemsPerRequest
-        end = @_buffer.start
-        @_getItems start, @_settings.itemsPerRequest, <span class="hljs-function"><span class="hljs-params">(err, res)</span> =&gt;</span>
-            @_requesting_top_items = <span class="hljs-literal">false</span>
-            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> err
-            <span class="hljs-keyword">if</span> res.length == <span class="hljs-number">0</span>
-                @_topBoundaryIndex = end
-                @_topBoundaryIndexTimestamp = <span class="hljs-keyword">new</span> Date()
-            <span class="hljs-keyword">else</span></pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-29">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-29">&#182;</a>
-              </div>
-              <p>FIXME: if buffer gets truncated during request we will break data ordering</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>                @_buffer.addItemsToStart(res)
-                <span class="hljs-keyword">if</span> @_buffer.start &lt; @_topBoundaryIndex
-                    @_topBoundaryIndex = <span class="hljs-literal">null</span>
-                @_updateStateAsync()</pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-30">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-30">&#182;</a>
-              </div>
-              <h2 id="-section-id-scrollerviewport-_beginofdatareached-section-"><section id='ScrollerViewport._beginOfDataReached'></section></h2>
-<p>This function tracks “begin of data”. If we request top items and receive empty result, we
-assume that we reached “befin of data”. We will not do any requests of top items for some
-(configurable) time. After that time requests for top items will be allowed.</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>    _beginOfDataReached: <span class="hljs-function">=&gt;</span>
-        now = <span class="hljs-keyword">new</span> Date()
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">not</span> (@_buffer.start == @_topBoundaryIndex &amp;&amp;
-            (now - @_topBoundaryIndexTimestamp &lt; @_settings.topBoundaryTimeout))</pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-31">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-31">&#182;</a>
-              </div>
-              <h2 id="-section-id-scrollerviewport-_requestmorebottomitems-section-"><section id='ScrollerViewport._requestMoreBottomItems'></section></h2>
-<p>See <code>@_requestMoreTopItems</code> for additional comments</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>    _requestMoreBottomItems: <span class="hljs-function">=&gt;</span>
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_requesting_bottom_items
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> @_endOfDataReached()
-        @_requesting_bottom_items = <span class="hljs-literal">true</span>
-        start = @_buffer.start + @_buffer.length
-        @_getItems start, @_settings.itemsPerRequest, <span class="hljs-function"><span class="hljs-params">(err, res)</span> =&gt;</span>
-            @_requesting_bottom_items = <span class="hljs-literal">false</span>
-            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> err
-            <span class="hljs-keyword">if</span> res.length == <span class="hljs-number">0</span>
-                @_bottomBoundaryIndex = start
-                @_bottomBoundaryIndexTimestamp = <span class="hljs-keyword">new</span> Date()
-            <span class="hljs-keyword">else</span></pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-32">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-32">&#182;</a>
-              </div>
-              <p>FIXME: if buffer gets truncated during request we will break data ordering</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>                @_buffer.addItemsToEnd(res)
-                <span class="hljs-keyword">if</span> @_buffer.start + @_buffer.length &gt; @_bottomBoundaryIndex
-                    @_bottomBoundaryIndex = <span class="hljs-literal">null</span>
-                @_updateStateAsync()</pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-33">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-33">&#182;</a>
-              </div>
-              <h2 id="-section-id-scrollerviewport-_endofdatareached-section-"><section id='ScrollerViewport._endOfDataReached'></section></h2>
-<p>See <code>@_beginOfDataReached</code> for additional comments</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>    _endOfDataReached: <span class="hljs-function">=&gt;</span>
-        now = <span class="hljs-keyword">new</span> Date()
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">not</span> (@_buffer.start + @_buffer.length == @_bottomBoundaryIndex &amp;&amp;
-            (now - @_bottomBoundaryIndexTimestamp &lt; @_settings.bottomBoundaryTimeout))</pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-34">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-34">&#182;</a>
+                <a class="pilcrow" href="#section-24">&#182;</a>
               </div>
               <p>Simply add new item to list of drawn items and send a command to draw this item for all
 <code>ScrollerItemList</code> controllers. Items should be drawn this tick so update on the next tick
@@ -696,11 +491,11 @@ will see changes and will be able to make new decisions.</p>
         </li>
         
         
-        <li id="section-35">
+        <li id="section-25">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-35">&#182;</a>
+                <a class="pilcrow" href="#section-25">&#182;</a>
               </div>
               <p>See <code>@_addTopDrawnItem</code> for additional comments.</p>
 
@@ -714,11 +509,11 @@ will see changes and will be able to make new decisions.</p>
         </li>
         
         
-        <li id="section-36">
+        <li id="section-26">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-36">&#182;</a>
+                <a class="pilcrow" href="#section-26">&#182;</a>
               </div>
               <h2 id="-section-id-scrollerviewport-_truncatebuffer-section-"><section id='ScrollerViewport._truncateBuffer'></section></h2>
 <p>This makes sure buffer does not grow infinitely. Buffer always contains more data than
@@ -746,11 +541,11 @@ rendered, paddings are configurable.</p>
         </li>
         
         
-        <li id="section-37">
+        <li id="section-27">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-37">&#182;</a>
+                <a class="pilcrow" href="#section-27">&#182;</a>
               </div>
               <p>Public method is used by <code>ScrollerItemList</code> to preserve scroll position when adding or
 removing items from the top. We assume that any change in height of contents are caused by
@@ -768,13 +563,13 @@ adding or removing of top items and compensate difference.</p>
         </li>
         
         
-        <li id="section-38">
+        <li id="section-28">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-38">&#182;</a>
+                <a class="pilcrow" href="#section-28">&#182;</a>
               </div>
-              <h3 id="scroller-item-list">Scroller item list</h3>
+              <h3 id="-section-id-scrolleritemlist-scroller-item-list-section-"><section id='ScrollerItemList'>Scroller item list</section></h3>
 <p><code>ScrollerItemList</code> is <code>angular.js</code> controller. It manages list of items currently rendered in
 viewport.</p>
 <p>Class state flow is very simple. Once instantiated, object of this class listens to viewport
@@ -800,11 +595,11 @@ events (commands) using angular.js scope for adding/removing top or bottom items
         </li>
         
         
-        <li id="section-39">
+        <li id="section-29">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-39">&#182;</a>
+                <a class="pilcrow" href="#section-29">&#182;</a>
               </div>
               <p>Data should be applied after transclusion, otherwise item won’t see changes</p>
 
@@ -842,46 +637,224 @@ events (commands) using angular.js scope for adding/removing top or bottom items
         </li>
         
         
-        <li id="section-40">
+        <li id="section-30">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-40">&#182;</a>
+                <a class="pilcrow" href="#section-30">&#182;</a>
               </div>
-              <h3 id="buffer">Buffer</h3>
-<p><code>Buffer</code> is used to store range of items: <code>{start: int, length: int}</code> and every stored index is a
-key in this object. Buffer assumes that only integer indexes are stored in it. It is capable of
-extension and truncating.</p>
+              <h3 id="-section-id-scrolleritemlist-buffer-section-"><section id='ScrollerItemList'>Buffer</section></h3>
+<p><code>Buffer</code> manages items given by source function. It stores range of items in the form of
+array-like object: <code>{start: int, length: int}</code> and every stored index is a key in this object.
+Buffer assumes that only integer indexes are stored in it. It is capable of extension and
+truncating stored items.</p>
 
             </div>
             
             <div class="content"><div class='highlight'><pre><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">Buffer</span></span>
-    constructor: <span class="hljs-function">-&gt;</span>
+    constructor: <span class="hljs-function"><span class="hljs-params">(@_getItems, @_settings)</span> -&gt;</span>
         @start = <span class="hljs-number">0</span>
         @length = <span class="hljs-number">0</span>
+        @_counter = <span class="hljs-number">0</span>
+        @_top_items_request_id = <span class="hljs-literal">null</span>
+        @_bottom_items_request_id = <span class="hljs-literal">null</span>
+
+    _addItemsToEnd: <span class="hljs-function"><span class="hljs-params">(items)</span> =&gt;</span>
+        <span class="hljs-keyword">for</span> item, idx <span class="hljs-keyword">in</span> items
+            @[@start + @length + idx] = item
+        @length += items.length
+
+    _addItemsToStart: <span class="hljs-function"><span class="hljs-params">(items)</span> =&gt;</span>
+        @start -= items.length
+        <span class="hljs-keyword">for</span> item, idx <span class="hljs-keyword">in</span> items
+            @[@start + idx] = item
+        @length += items.length
+
+    updateSettings: <span class="hljs-function"><span class="hljs-params">(settings)</span> =&gt;</span>
+        @_settings = settings</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-31">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-31">&#182;</a>
+              </div>
+              <h2 id="-section-id-buffer-requestmoretopitems-section-"><section id='Buffer.requestMoreTopItems'></section></h2>
+<p>Only one request of top items may be active at a time. That ensures that multiple actions like
+“scroll to bottom and back to top” does not make multiple requests. Note that no rendering
+happens when data arrives. Data is added to the buffer and <code>@_updateStateAsync</code> is called.
+Errors in data source callback are ignored, but they do not forbid further requests of top
+items.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>    requestMoreTopItems: <span class="hljs-function"><span class="hljs-params">(quantity, callback)</span> =&gt;</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_top_items_request_id?
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_beginOfDataReached()
+        request_id = @_top_items_request_id = @_counter
+        @_counter += <span class="hljs-number">1</span>
+        start = @start - quantity
+        end = @start
+        @_getItems start, quantity, <span class="hljs-function"><span class="hljs-params">(err, res)</span> =&gt;</span></pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-32">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-32">&#182;</a>
+              </div>
+              <p>Request has been canceled</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> request_id != @_top_items_request_id
+            @_top_items_request_id = <span class="hljs-literal">null</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> err
+            <span class="hljs-keyword">if</span> res.length == <span class="hljs-number">0</span>
+                @_topBoundaryIndex = end
+                @_topBoundaryIndexTimestamp = <span class="hljs-keyword">new</span> Date()
+            <span class="hljs-keyword">else</span>
+                @_addItemsToStart(res)
+                <span class="hljs-keyword">if</span> @start &lt; @_topBoundaryIndex
+                    @_topBoundaryIndex = <span class="hljs-literal">null</span>
+                callback()</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-33">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-33">&#182;</a>
+              </div>
+              <h2 id="-section-id-buffer-_beginofdatareached-section-"><section id='Buffer._beginOfDataReached'></section></h2>
+<p>This function tracks “begin of data”. If we request top items and receive empty result, we
+assume that we reached “begin of data”. We will not do any requests of top items for some
+(configurable) time. After that time requests for top items will be allowed.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>    _beginOfDataReached: <span class="hljs-function">=&gt;</span>
+        now = <span class="hljs-keyword">new</span> Date()
+        <span class="hljs-keyword">return</span> @start == @_topBoundaryIndex &amp;&amp;
+            (now - @_topBoundaryIndexTimestamp &lt; @_settings.topBoundaryTimeout)</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-34">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-34">&#182;</a>
+              </div>
+              <h2 id="-section-id-buffer-requestmorebottomitems-section-"><section id='Buffer.requestMoreBottomItems'></section></h2>
+<p>See <a href="#Buffer.requestMoreTopItems"><code>@requestMoreTopItems</code></a> for additional comments</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>    requestMoreBottomItems: <span class="hljs-function"><span class="hljs-params">(quantity, callback)</span> =&gt;</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_bottom_items_request_id?
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_endOfDataReached()
+        request_id = @_bottom_items_request_id = @_counter
+        @_counter += <span class="hljs-number">1</span>
+        start = @start + @length
+        @_getItems start, quantity, <span class="hljs-function"><span class="hljs-params">(err, res)</span> =&gt;</span></pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-35">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-35">&#182;</a>
+              </div>
+              <p>Request has been canceled</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> request_id != @_bottom_items_request_id
+            @_bottom_items_request_id = <span class="hljs-literal">null</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> err
+            <span class="hljs-keyword">if</span> res.length == <span class="hljs-number">0</span>
+                @_bottomBoundaryIndex = start
+                @_bottomBoundaryIndexTimestamp = <span class="hljs-keyword">new</span> Date()
+            <span class="hljs-keyword">else</span>
+                @_addItemsToEnd(res)
+                <span class="hljs-keyword">if</span> @start + @length &gt; @_bottomBoundaryIndex
+                    @_bottomBoundaryIndex = <span class="hljs-literal">null</span>
+                callback()</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-36">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-36">&#182;</a>
+              </div>
+              <h2 id="-section-id-buffer-_endofdatareached-section-"><section id='Buffer._endOfDataReached'></section></h2>
+<p>See <a href="#Buffer._beginOfDataReached"><code>@_beginOfDataReached</code></a> for additional comments</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>    _endOfDataReached: <span class="hljs-function">=&gt;</span>
+        now = <span class="hljs-keyword">new</span> Date()
+        <span class="hljs-keyword">return</span> @start + @length == @_bottomBoundaryIndex &amp;&amp;
+            (now - @_bottomBoundaryIndexTimestamp &lt; @_settings.bottomBoundaryTimeout)
 
     truncateTo: <span class="hljs-function"><span class="hljs-params">(start, end)</span> =&gt;</span>
         <span class="hljs-keyword">if</span> @start &lt; start
             <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> [@start...start]
                 <span class="hljs-keyword">delete</span> @[i]
             @length = Math.max(<span class="hljs-number">0</span>, @length - (start - @start))
-            @start = start
+            @start = start</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-37">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-37">&#182;</a>
+              </div>
+              <p>Cancel current top items request because we created a gap between items in this
+request and start of buffer</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>            @_top_items_request_id = <span class="hljs-literal">null</span>
         cur_end = @start + @length - <span class="hljs-number">1</span>
         <span class="hljs-keyword">if</span> cur_end &gt; end
             <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> [cur_end...end]
                 <span class="hljs-keyword">delete</span> @[i]
-            @length = Math.max(<span class="hljs-number">0</span>, @length - (cur_end - end))
+            @length = Math.max(<span class="hljs-number">0</span>, @length - (cur_end - end))</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-38">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-38">&#182;</a>
+              </div>
+              <p>Cancel current bottom items request because we created a gap between items in this
+request and end of buffer</p>
 
-    addItemsToEnd: <span class="hljs-function"><span class="hljs-params">(items)</span> =&gt;</span>
-        <span class="hljs-keyword">for</span> item, idx <span class="hljs-keyword">in</span> items
-            @[@start + @length + idx] = item
-        @length += items.length
-
-    addItemsToStart: <span class="hljs-function"><span class="hljs-params">(items)</span> =&gt;</span>
-        @start -= items.length
-        <span class="hljs-keyword">for</span> item, idx <span class="hljs-keyword">in</span> items
-            @[@start + idx] = item
-        @length += items.length
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>            @_bottom_items_request_id = <span class="hljs-literal">null</span>
 
 
 angular.<span class="hljs-built_in">module</span>(<span class="hljs-string">'scroller'</span>, [])
@@ -890,7 +863,11 @@ angular.<span class="hljs-built_in">module</span>(<span class="hljs-string">'scr
     restrict: <span class="hljs-string">'A'</span>
     scope: {<span class="hljs-string">'scrollerSource'</span>: <span class="hljs-string">'='</span>, <span class="hljs-string">'scrollerSettings'</span>: <span class="hljs-string">'='</span>}
     controller: <span class="hljs-function"><span class="hljs-params">($scope, $element)</span> -&gt;</span>
-        <span class="hljs-keyword">new</span> ScrollerViewport($scope, $element[<span class="hljs-number">0</span>])
+        viewportController = <span class="hljs-keyword">new</span> ScrollerViewport($scope, $element[<span class="hljs-number">0</span>], $scope.scrollerSource, $scope.scrollerSettings)
+<span class="hljs-function">        <span class="hljs-title">update_settings</span> = -&gt;</span>
+            viewportController.updateSettings($scope.scrollerSettings)
+        $scope.$watch(<span class="hljs-string">'scrollerSettings'</span>, update_settings, <span class="hljs-literal">true</span>)
+        <span class="hljs-keyword">return</span> viewportController
 
 .directive <span class="hljs-string">'scrollerItem'</span>, <span class="hljs-function">-&gt;</span>
     restrict: <span class="hljs-string">'A'</span>
