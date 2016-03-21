@@ -694,8 +694,7 @@ truncating stored items.</p>
               </div>
               <h2 id="-section-id-buffer-requestmoretopitems-section-"><section id='Buffer.requestMoreTopItems'></section></h2>
 <p>Only one request of top items may be active at a time. That ensures that multiple actions like
-“scroll to bottom and back to top” does not make multiple requests. Errors in data source
-callback are ignored, they do not forbid further requests of top items.</p>
+“scroll to bottom and back to top” does not make multiple requests.</p>
 
             </div>
             
@@ -706,7 +705,7 @@ callback are ignored, they do not forbid further requests of top items.</p>
         @_counter += <span class="hljs-number">1</span>
         start = @start - quantity
         end = @start
-        @_getItems start, quantity, <span class="hljs-function"><span class="hljs-params">(err, res)</span> =&gt;</span></pre></div></div>
+        @_getItems start, quantity, <span class="hljs-function"><span class="hljs-params">(res)</span> =&gt;</span></pre></div></div>
             
         </li>
         
@@ -723,7 +722,6 @@ callback are ignored, they do not forbid further requests of top items.</p>
             
             <div class="content"><div class='highlight'><pre>            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> request_id != @_top_items_request_id
             @_top_items_request_id = <span class="hljs-literal">null</span>
-            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> err
             <span class="hljs-keyword">if</span> res.length == <span class="hljs-number">0</span>
                 @_topBoundaryIndex = end
                 @_topBoundaryIndexTimestamp = <span class="hljs-keyword">new</span> Date()
@@ -774,7 +772,7 @@ assume that we reached “begin of data”. We will not do any requests of top i
         request_id = @_bottom_items_request_id = @_counter
         @_counter += <span class="hljs-number">1</span>
         start = @start + @length
-        @_getItems start, quantity, <span class="hljs-function"><span class="hljs-params">(err, res)</span> =&gt;</span></pre></div></div>
+        @_getItems start, quantity, <span class="hljs-function"><span class="hljs-params">(res)</span> =&gt;</span></pre></div></div>
             
         </li>
         
@@ -791,7 +789,6 @@ assume that we reached “begin of data”. We will not do any requests of top i
             
             <div class="content"><div class='highlight'><pre>            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> request_id != @_bottom_items_request_id
             @_bottom_items_request_id = <span class="hljs-literal">null</span>
-            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> err
             <span class="hljs-keyword">if</span> res.length == <span class="hljs-number">0</span>
                 @_bottomBoundaryIndex = start
                 @_bottomBoundaryIndexTimestamp = <span class="hljs-keyword">new</span> Date()
