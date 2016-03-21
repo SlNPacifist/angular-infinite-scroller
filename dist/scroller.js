@@ -303,8 +303,8 @@
       this.start = 0;
       this.length = 0;
       this._counter = 0;
-      this._top_items_request_id = null;
-      this._bottom_items_request_id = null;
+      this._topItemsRequestId = null;
+      this._bottomItemsRequestId = null;
     }
 
     Buffer.prototype._addItemsToEnd = function(items) {
@@ -332,22 +332,22 @@
 
     Buffer.prototype.requestMoreTopItems = function(quantity, callback) {
       var end, request_id, start;
-      if (this._top_items_request_id != null) {
+      if (this._topItemsRequestId != null) {
         return;
       }
       if (this._beginOfDataReached()) {
         return;
       }
-      request_id = this._top_items_request_id = this._counter;
+      request_id = this._topItemsRequestId = this._counter;
       this._counter += 1;
       start = this.start - quantity;
       end = this.start;
       return this._getItems(start, quantity, (function(_this) {
         return function(res) {
-          if (request_id !== _this._top_items_request_id) {
+          if (request_id !== _this._topItemsRequestId) {
             return;
           }
-          _this._top_items_request_id = null;
+          _this._topItemsRequestId = null;
           if (res.length === 0) {
             _this._topBoundaryIndex = end;
             return _this._topBoundaryIndexTimestamp = new Date();
@@ -370,21 +370,21 @@
 
     Buffer.prototype.requestMoreBottomItems = function(quantity, callback) {
       var request_id, start;
-      if (this._bottom_items_request_id != null) {
+      if (this._bottomItemsRequestId != null) {
         return;
       }
       if (this._endOfDataReached()) {
         return;
       }
-      request_id = this._bottom_items_request_id = this._counter;
+      request_id = this._bottomItemsRequestId = this._counter;
       this._counter += 1;
       start = this.start + this.length;
       return this._getItems(start, quantity, (function(_this) {
         return function(res) {
-          if (request_id !== _this._bottom_items_request_id) {
+          if (request_id !== _this._bottomItemsRequestId) {
             return;
           }
-          _this._bottom_items_request_id = null;
+          _this._bottomItemsRequestId = null;
           if (res.length === 0) {
             _this._bottomBoundaryIndex = start;
             return _this._bottomBoundaryIndexTimestamp = new Date();
@@ -413,7 +413,7 @@
         }
         this.length = Math.max(0, this.length - (start - this.start));
         this.start = start;
-        this._top_items_request_id = null;
+        this._topItemsRequestId = null;
       }
       cur_end = this.start + this.length - 1;
       if (cur_end > end) {
@@ -421,7 +421,7 @@
           delete this[i];
         }
         this.length = Math.max(0, this.length - (cur_end - end));
-        return this._bottom_items_request_id = null;
+        return this._bottomItemsRequestId = null;
       }
     };
 

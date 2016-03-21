@@ -285,8 +285,8 @@ class Buffer
         @start = 0
         @length = 0
         @_counter = 0
-        @_top_items_request_id = null
-        @_bottom_items_request_id = null
+        @_topItemsRequestId = null
+        @_bottomItemsRequestId = null
 
     _addItemsToEnd: (items) =>
         for item, idx in items
@@ -306,16 +306,16 @@ class Buffer
     # Only one request of top items may be active at a time. That ensures that multiple actions like
     # "scroll to bottom and back to top" does not make multiple requests.
     requestMoreTopItems: (quantity, callback) =>
-        return if @_top_items_request_id?
+        return if @_topItemsRequestId?
         return if @_beginOfDataReached()
-        request_id = @_top_items_request_id = @_counter
+        request_id = @_topItemsRequestId = @_counter
         @_counter += 1
         start = @start - quantity
         end = @start
         @_getItems start, quantity, (res) =>
             # Request has been canceled
-            return if request_id != @_top_items_request_id
-            @_top_items_request_id = null
+            return if request_id != @_topItemsRequestId
+            @_topItemsRequestId = null
             if res.length == 0
                 @_topBoundaryIndex = end
                 @_topBoundaryIndexTimestamp = new Date()
@@ -337,15 +337,15 @@ class Buffer
     # ## <section id='Buffer.requestMoreBottomItems'></section>
     # See [`@requestMoreTopItems`](#Buffer.requestMoreTopItems) for additional comments
     requestMoreBottomItems: (quantity, callback) =>
-        return if @_bottom_items_request_id?
+        return if @_bottomItemsRequestId?
         return if @_endOfDataReached()
-        request_id = @_bottom_items_request_id = @_counter
+        request_id = @_bottomItemsRequestId = @_counter
         @_counter += 1
         start = @start + @length
         @_getItems start, quantity, (res) =>
             # Request has been canceled
-            return if request_id != @_bottom_items_request_id
-            @_bottom_items_request_id = null
+            return if request_id != @_bottomItemsRequestId
+            @_bottomItemsRequestId = null
             if res.length == 0
                 @_bottomBoundaryIndex = start
                 @_bottomBoundaryIndexTimestamp = new Date()
@@ -370,7 +370,7 @@ class Buffer
             @start = start
             # Cancel current top items request because we created a gap between items in this
             # request and start of buffer
-            @_top_items_request_id = null
+            @_topItemsRequestId = null
         cur_end = @start + @length - 1
         if cur_end > end
             for i in [cur_end...end]
@@ -378,7 +378,7 @@ class Buffer
             @length = Math.max(0, @length - (cur_end - end))
             # Cancel current bottom items request because we created a gap between items in this
             # request and end of buffer
-            @_bottom_items_request_id = null
+            @_bottomItemsRequestId = null
 
 
 angular.module('scroller', [])
