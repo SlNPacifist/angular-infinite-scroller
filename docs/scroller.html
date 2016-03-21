@@ -202,13 +202,23 @@ flow.</p>
               <p><code>scope</code>: <a href="https://docs.angularjs.org/api/ng/type/$rootScope.Scope"><code>angular.js scope</code></a>. Used
 for communication with <a href="#ScrollerItemList">ScrollerItemList</a> througe events.</p>
 <p><code>element</code>: <code>DOM Node</code> bound to this viewport</p>
-<p><code>scrollerSource</code>: <code>function</code></p>
+<p><code>source</code>: <code>function(start, count, callback)</code>. This function is called whenever new data is
+needed.</p>
+<ul>
+<li><code>start</code>: <code>int</code></li>
+<li><code>count</code>: <code>int</code></li>
+<li><code>callback</code>: <code>function(res)</code>. Callback should be called when needed data is ready.<ul>
+<li><code>res</code>: <code>array</code>. Should contain <code>count</code> items in it. If request hit boundary of data, <code>res</code>
+can contain less then <code>count</code> data or even no data at all.</li>
+</ul>
+</li>
+</ul>
 <p><code>settings</code>: <code>object</code>. Settings object with structure similar to
 <a href="#VIEWPORT_DEFAULT_SETTINGS">default settings</a></p>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>    constructor: <span class="hljs-function"><span class="hljs-params">(@scope, @_element, scrollerSource, settings={})</span> -&gt;</span>
+            <div class="content"><div class='highlight'><pre>    constructor: <span class="hljs-function"><span class="hljs-params">(@scope, @_element, source, settings={})</span> -&gt;</span>
         @_settings = angular.merge(settings, VIEWPORT_DEFAULT_SETTINGS)</pre></div></div>
             
         </li>
@@ -236,11 +246,11 @@ for communication with <a href="#ScrollerItemList">ScrollerItemList</a> througe 
               <div class="pilwrap ">
                 <a class="pilcrow" href="#section-12">&#182;</a>
               </div>
-              <p><a href="#Buffer"><code>Buffer</code></a> caches data from <code>scrollerSource</code></p>
+              <p><a href="#Buffer"><code>Buffer</code></a> caches data from <code>source</code></p>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>        @_buffer = <span class="hljs-keyword">new</span> Buffer(scrollerSource, @_settings.buffer)</pre></div></div>
+            <div class="content"><div class='highlight'><pre>        @_buffer = <span class="hljs-keyword">new</span> Buffer(source, @_settings.buffer)</pre></div></div>
             
         </li>
         
@@ -266,7 +276,13 @@ we do not track. Better later then never.</p>
         <span class="hljs-keyword">if</span> @_settings.autoUpdateInterval != settings.autoUpdateInterval
             @_changeAutoUpdateInterval(settings.autoUpdateInterval)
         @_settings = settings
-        @_buffer.updateSettings(@_settings.buffer)</pre></div></div>
+        @_buffer.updateSettings(@_settings.buffer)
+
+    updateSource: <span class="hljs-function"><span class="hljs-params">(source)</span> =&gt;</span>
+        @_buffer.destroy()
+        @_buffer = <span class="hljs-keyword">new</span> Buffer(source, @_settings.buffer)
+        @_drawnItems = []
+        @scope.$broadcast(<span class="hljs-string">'clear'</span>)</pre></div></div>
             
         </li>
         
@@ -487,7 +503,7 @@ will see changes and will be able to make new decisions.</p>
             
             <div class="content"><div class='highlight'><pre>    _addTopDrawnItem: <span class="hljs-function"><span class="hljs-params">(item)</span> =&gt;</span>
         @_drawnItems = [item].concat(@_drawnItems)
-        @scope.$broadcast(<span class="hljs-string">'top-item-rendered'</span>, item)
+        @scope.$broadcast(<span class="hljs-string">'render-top-item'</span>, item)
         @_updateStateAsync()</pre></div></div>
             
         </li>
@@ -505,7 +521,7 @@ will see changes and will be able to make new decisions.</p>
             
             <div class="content"><div class='highlight'><pre>    _addBottomDrawnItem: <span class="hljs-function"><span class="hljs-params">(item)</span> =&gt;</span>
         @_drawnItems.push(item)
-        @scope.$broadcast(<span class="hljs-string">'bottom-item-rendered'</span>, item)
+        @scope.$broadcast(<span class="hljs-string">'render-bottom-item'</span>, item)
         @_updateStateAsync()</pre></div></div>
             
         </li>
@@ -530,13 +546,13 @@ rendered, paddings are configurable.</p>
 
     _removeTopDrawnItem: <span class="hljs-function">=&gt;</span>
         @_drawnItems = @_drawnItems[<span class="hljs-number">1.</span>.]
-        @scope.$broadcast(<span class="hljs-string">'top-item-removed'</span>)
+        @scope.$broadcast(<span class="hljs-string">'remove-top-item'</span>)
         @_truncateBuffer()
         @_updateStateAsync()
 
     _removeBottomDrawnItem: <span class="hljs-function">=&gt;</span>
         @_drawnItems.pop()
-        @scope.$broadcast(<span class="hljs-string">'bottom-item-removed'</span>)
+        @scope.$broadcast(<span class="hljs-string">'remove-bottom-item'</span>)
         @_truncateBuffer()
         @_updateStateAsync()</pre></div></div>
             
@@ -589,10 +605,11 @@ Adds new properties to scope:</p>
             <div class="content"><div class='highlight'><pre><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ScrollerItemList</span></span>
     constructor: <span class="hljs-function"><span class="hljs-params">(@_$element, @_viewportController, @_$transclude)</span> -&gt;</span>
         @_renderedItems = []
-        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'top-item-rendered'</span>, <span class="hljs-function"><span class="hljs-params">(_, source)</span> =&gt;</span> @_addTopItem(source))
-        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'bottom-item-rendered'</span>, <span class="hljs-function"><span class="hljs-params">(_, source)</span> =&gt;</span> @_addBottomItem(source))
-        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'top-item-removed'</span>, @_removeTopItem)
-        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'bottom-item-removed'</span>, @_removeBottomItem)
+        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'render-top-item'</span>, <span class="hljs-function"><span class="hljs-params">(_, source)</span> =&gt;</span> @_addTopItem(source))
+        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'render-bottom-item'</span>, <span class="hljs-function"><span class="hljs-params">(_, source)</span> =&gt;</span> @_addBottomItem(source))
+        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'remove-top-item'</span>, @_removeTopItem)
+        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'remove-bottom-item'</span>, @_removeBottomItem)
+        @_viewportController.scope.$<span class="hljs-literal">on</span>(<span class="hljs-string">'clear'</span>, @_clear)
 
     _createItem: <span class="hljs-function"><span class="hljs-params">(source, insert_point)</span> =&gt;</span>
         item = {scope: <span class="hljs-literal">null</span>, clone: <span class="hljs-literal">null</span>}
@@ -641,8 +658,11 @@ Adds new properties to scope:</p>
 
     _removeBottomItem: <span class="hljs-function">=&gt;</span>
         <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_renderedItems.length == <span class="hljs-number">0</span>
-        lastItem = @_renderedItems.pop()
-        @_destroyItem(lastItem)</pre></div></div>
+        @_destroyItem(@_renderedItems.pop())
+
+    _clear: <span class="hljs-function">=&gt;</span>
+        @_destroyItem(item) <span class="hljs-keyword">for</span> item <span class="hljs-keyword">in</span> @_renderedItems
+        @_renderedItems = []</pre></div></div>
             
         </li>
         
@@ -666,8 +686,8 @@ truncating stored items.</p>
         @start = <span class="hljs-number">0</span>
         @length = <span class="hljs-number">0</span>
         @_counter = <span class="hljs-number">0</span>
-        @_top_items_request_id = <span class="hljs-literal">null</span>
-        @_bottom_items_request_id = <span class="hljs-literal">null</span>
+        @_topItemsRequestId = <span class="hljs-literal">null</span>
+        @_bottomItemsRequestId = <span class="hljs-literal">null</span>
 
     _addItemsToEnd: <span class="hljs-function"><span class="hljs-params">(items)</span> =&gt;</span>
         <span class="hljs-keyword">for</span> item, idx <span class="hljs-keyword">in</span> items
@@ -699,9 +719,9 @@ truncating stored items.</p>
             </div>
             
             <div class="content"><div class='highlight'><pre>    requestMoreTopItems: <span class="hljs-function"><span class="hljs-params">(quantity, callback)</span> =&gt;</span>
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_top_items_request_id?
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_topItemsRequestId?
         <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_beginOfDataReached()
-        request_id = @_top_items_request_id = @_counter
+        request_id = @_topItemsRequestId = @_counter
         @_counter += <span class="hljs-number">1</span>
         start = @start - quantity
         end = @start
@@ -720,8 +740,8 @@ truncating stored items.</p>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> request_id != @_top_items_request_id
-            @_top_items_request_id = <span class="hljs-literal">null</span>
+            <div class="content"><div class='highlight'><pre>            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> request_id != @_topItemsRequestId
+            @_topItemsRequestId = <span class="hljs-literal">null</span>
             <span class="hljs-keyword">if</span> res.length == <span class="hljs-number">0</span>
                 @_topBoundaryIndex = end
                 @_topBoundaryIndexTimestamp = <span class="hljs-keyword">new</span> Date()
@@ -767,9 +787,9 @@ assume that we reached “begin of data”. We will not do any requests of top i
             </div>
             
             <div class="content"><div class='highlight'><pre>    requestMoreBottomItems: <span class="hljs-function"><span class="hljs-params">(quantity, callback)</span> =&gt;</span>
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_bottom_items_request_id?
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_bottomItemsRequestId?
         <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> @_endOfDataReached()
-        request_id = @_bottom_items_request_id = @_counter
+        request_id = @_bottomItemsRequestId = @_counter
         @_counter += <span class="hljs-number">1</span>
         start = @start + @length
         @_getItems start, quantity, <span class="hljs-function"><span class="hljs-params">(res)</span> =&gt;</span></pre></div></div>
@@ -787,8 +807,8 @@ assume that we reached “begin of data”. We will not do any requests of top i
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> request_id != @_bottom_items_request_id
-            @_bottom_items_request_id = <span class="hljs-literal">null</span>
+            <div class="content"><div class='highlight'><pre>            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> request_id != @_bottomItemsRequestId
+            @_bottomItemsRequestId = <span class="hljs-literal">null</span>
             <span class="hljs-keyword">if</span> res.length == <span class="hljs-number">0</span>
                 @_bottomBoundaryIndex = start
                 @_bottomBoundaryIndexTimestamp = <span class="hljs-keyword">new</span> Date()
@@ -838,7 +858,7 @@ request and start of buffer</p>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>            @_top_items_request_id = <span class="hljs-literal">null</span>
+            <div class="content"><div class='highlight'><pre>            @_topItemsRequestId = <span class="hljs-literal">null</span>
         cur_end = @start + @length - <span class="hljs-number">1</span>
         <span class="hljs-keyword">if</span> cur_end &gt; end
             <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> [cur_end...end]
@@ -859,19 +879,41 @@ request and end of buffer</p>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>            @_bottom_items_request_id = <span class="hljs-literal">null</span>
+            <div class="content"><div class='highlight'><pre>            @_bottomItemsRequestId = <span class="hljs-literal">null</span></pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-39">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-39">&#182;</a>
+              </div>
+              <p>Called when data source changes</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>    destroy: <span class="hljs-function">=&gt;</span>
+        @_topItemsRequestId = <span class="hljs-literal">null</span>
+        @_bottomItemsRequestId = <span class="hljs-literal">null</span>
 
 
 angular.<span class="hljs-built_in">module</span>(<span class="hljs-string">'scroller'</span>, [])
 
 .directive <span class="hljs-string">'scrollerViewport'</span>, <span class="hljs-function">-&gt;</span>
     restrict: <span class="hljs-string">'A'</span>
-    scope: {<span class="hljs-string">'scrollerSource'</span>: <span class="hljs-string">'='</span>, <span class="hljs-string">'scrollerSettings'</span>: <span class="hljs-string">'='</span>}
+    scope: {<span class="hljs-string">'scrollerViewport'</span>: <span class="hljs-string">'='</span>, <span class="hljs-string">'scrollerSettings'</span>: <span class="hljs-string">'='</span>}
     controller: <span class="hljs-function"><span class="hljs-params">($scope, $element)</span> -&gt;</span>
-        viewportController = <span class="hljs-keyword">new</span> ScrollerViewport($scope, $element[<span class="hljs-number">0</span>], $scope.scrollerSource, $scope.scrollerSettings)
+        viewportController = <span class="hljs-keyword">new</span> ScrollerViewport($scope, $element[<span class="hljs-number">0</span>], $scope.scrollerViewport, $scope.scrollerSettings)
 <span class="hljs-function">        <span class="hljs-title">update_settings</span> = -&gt;</span>
             viewportController.updateSettings($scope.scrollerSettings)
         $scope.$watch(<span class="hljs-string">'scrollerSettings'</span>, update_settings, <span class="hljs-literal">true</span>)
+        oldSource = $scope.scrollerViewport
+        $scope.$watch <span class="hljs-string">'scrollerViewport'</span>, <span class="hljs-function">-&gt;</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">if</span> oldSource == $scope.scrollerViewport
+            oldSource = $scope.scrollerViewport
+            viewportController.updateSource($scope.scrollerViewport)
         <span class="hljs-keyword">return</span> viewportController
 
 .directive <span class="hljs-string">'scrollerItem'</span>, <span class="hljs-function">-&gt;</span>
