@@ -222,39 +222,44 @@ class ScrollerViewport
 #
 # Class state flow is very simple. Once instantiated, object of this class listens to viewport
 # events (commands) using angular.js scope for adding/removing top or bottom items.
+# Adds new properties to scope:
+#
+# * scrIndex: global index of rendered item
+# * scrData: data received from source function
 class ScrollerItemList
     constructor: (@_$element, @_viewportController, @_$transclude) ->
         @_renderedItems = []
-        @_viewportController.scope.$on('top-item-rendered', @_addTopItem)
-        @_viewportController.scope.$on('bottom-item-rendered', @_addBottomItem)
+        @_viewportController.scope.$on('top-item-rendered', (_, source) => @_addTopItem(source))
+        @_viewportController.scope.$on('bottom-item-rendered', (_, source) => @_addBottomItem(source))
         @_viewportController.scope.$on('top-item-removed', @_removeTopItem)
         @_viewportController.scope.$on('bottom-item-removed', @_removeBottomItem)
 
-    _createItem: (data, insert_point) =>
-        item = {scope: null, clone: null, data: data}
+    _createItem: (source, insert_point) =>
+        item = {scope: null, clone: null}
         @_$transclude (node, scope) ->
             item.scope = scope
             item.clone = node[0]
             insertAfter(item.clone, insert_point)
         # Data should be applied after transclusion, otherwise item won't see changes
         item.scope.$apply ->
-            item.scope.scrData = item.data
+            item.scope.scrIndex = source.index
+            item.scope.scrData = source.data
         item
 
     _destroyItem: (item) ->
         item.clone.remove()
         item.scope.$destroy()
 
-    _addTopItem: (_, data) =>
+    _addTopItem: (source) =>
         @_viewportController.preserveScroll =>
-            @_renderedItems.unshift(@_createItem(data, @_$element[0]))
+            @_renderedItems.unshift(@_createItem(source, @_$element[0]))
 
-    _addBottomItem: (_, data) =>
+    _addBottomItem: (source) =>
         if @_renderedItems.length > 0
             insert_point = @_renderedItems[@_renderedItems.length - 1].clone
         else
             insert_point = @_$element[0]
-        @_renderedItems.push(@_createItem(data, insert_point))
+        @_renderedItems.push(@_createItem(source, insert_point))
 
     _removeTopItem: =>
         return if @_renderedItems.length == 0

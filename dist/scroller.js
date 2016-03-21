@@ -209,18 +209,25 @@
       this._addTopItem = bind(this._addTopItem, this);
       this._createItem = bind(this._createItem, this);
       this._renderedItems = [];
-      this._viewportController.scope.$on('top-item-rendered', this._addTopItem);
-      this._viewportController.scope.$on('bottom-item-rendered', this._addBottomItem);
+      this._viewportController.scope.$on('top-item-rendered', (function(_this) {
+        return function(_, source) {
+          return _this._addTopItem(source);
+        };
+      })(this));
+      this._viewportController.scope.$on('bottom-item-rendered', (function(_this) {
+        return function(_, source) {
+          return _this._addBottomItem(source);
+        };
+      })(this));
       this._viewportController.scope.$on('top-item-removed', this._removeTopItem);
       this._viewportController.scope.$on('bottom-item-removed', this._removeBottomItem);
     }
 
-    ScrollerItemList.prototype._createItem = function(data, insert_point) {
+    ScrollerItemList.prototype._createItem = function(source, insert_point) {
       var item;
       item = {
         scope: null,
-        clone: null,
-        data: data
+        clone: null
       };
       this._$transclude(function(node, scope) {
         item.scope = scope;
@@ -228,7 +235,8 @@
         return insertAfter(item.clone, insert_point);
       });
       item.scope.$apply(function() {
-        return item.scope.scrData = item.data;
+        item.scope.scrIndex = source.index;
+        return item.scope.scrData = source.data;
       });
       return item;
     };
@@ -238,22 +246,22 @@
       return item.scope.$destroy();
     };
 
-    ScrollerItemList.prototype._addTopItem = function(_, data) {
+    ScrollerItemList.prototype._addTopItem = function(source) {
       return this._viewportController.preserveScroll((function(_this) {
         return function() {
-          return _this._renderedItems.unshift(_this._createItem(data, _this._$element[0]));
+          return _this._renderedItems.unshift(_this._createItem(source, _this._$element[0]));
         };
       })(this));
     };
 
-    ScrollerItemList.prototype._addBottomItem = function(_, data) {
+    ScrollerItemList.prototype._addBottomItem = function(source) {
       var insert_point;
       if (this._renderedItems.length > 0) {
         insert_point = this._renderedItems[this._renderedItems.length - 1].clone;
       } else {
         insert_point = this._$element[0];
       }
-      return this._renderedItems.push(this._createItem(data, insert_point));
+      return this._renderedItems.push(this._createItem(source, insert_point));
     };
 
     ScrollerItemList.prototype._removeTopItem = function() {

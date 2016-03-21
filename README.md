@@ -25,11 +25,16 @@ or full version:
     <script src="/bower_components/angular-infinite-scroller/dist/scroller.min.js" type="text/javascript"></script>
 ```
 
+List module 'scroller' in your app module dependencies:
+```javascript
+    var myApp = angular.module('myApp', ['ui.scroll', ...]);
+```
+
 Now you can use directives:
 
 ```html
 <ANY scroller-viewport scroller-source="getData" scroller-settings="scrollerViewportSettings">
-    <ANY scroller-item>{{scrData.data}}</ANY>
+    <ANY scroller-item>{{scrIndex}} {{scrData}}</ANY>
 </ANY>
 ```
 
@@ -42,8 +47,8 @@ viewport may be arbitrary and scroller-item could be used several times:
 
 ```html
 <div class="editor-body" scroller-viewport scroller-source="getData">
-    <div class="numbers"><p scroller-item>{{scrData.index}}</p></div>
-    <div class="text"><p scroller-item>{{scrData.data}}</p></div>
+    <div class="numbers"><p scroller-item>{{scrIndex}}</p></div>
+    <div class="text"><p scroller-item>{{scrData}}</p></div>
 </div>
 ```
 
