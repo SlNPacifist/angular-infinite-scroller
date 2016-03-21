@@ -8,11 +8,6 @@ angular.module('application', ['scroller'])
                 end = Math.max(end, 0)
                 callback(null, $scope.data[index...end])
             , 0
-        $scope.scrollerViewportSettings =
-            paddingTop:
-                min: 100
-                max: 150
-            afterScrollWaitTime: 100
     ]
 
 angular.bootstrap(document, ["application"])

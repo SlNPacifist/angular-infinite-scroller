@@ -1,9 +1,10 @@
 # ### Code conventions:
 #
-# * Class members starting with underscore are considered **private** and should not be accessed
+# * Class members starting with underscore are **private** and should not be accessed
 # * Other class members are **read-only**
 # * All the changes to class should be done using public methods
 
+# ### <section id='VIEWPORT_DEFAULT_SETTINGS'>Default settings</section>
 # Default settings for viewport. If any setting is not listed in scope, it will be copied from this
 # object.
 VIEWPORT_DEFAULT_SETTINGS =
@@ -18,8 +19,8 @@ VIEWPORT_DEFAULT_SETTINGS =
         min: 100
         max: 150
     # Number of items in every request. See
-    # [`ScrollerViewport._requestMoreTopItems`](#ScrollerViewport._requestMoreTopItems) and
-    # [`ScrollerViewport._requestMoreBottomItems`](#ScrollerViewport._requestMoreBottomItems)
+    # [`ScrollerViewport._tryDrawTopItem`](#ScrollerViewport._tryDrawTopItem) and
+    # [`ScrollerViewport._tryDrawBottomItem`](#ScrollerViewport._tryDrawBottomItem)
     itemsPerRequest: 10
     # Number of milliseconds between "auto updates". This tracks any changes that cannot be tracked
     # otherwise. See
@@ -28,10 +29,11 @@ VIEWPORT_DEFAULT_SETTINGS =
     # See [`ScrollerViewport._updateState`](#ScrollerViewport._updateState) for details.
     afterScrollWaitTime: 100
     # Number of milliseconds after which viewport will allow re-checking boundary of data. See
-    # [`ScrollerViewport._beginOfDataReached`](#ScrollerViewport._beginOfDataReached) and
-    # [`ScrollerViewport._endOfDataReached`](#ScrollerViewport._endOfDataReached) for details.
-    topBoundaryTimeout: 10000
-    bottomBoundaryTimeout: 10000
+    # [`Buffer._beginOfDataReached`](#Buffer._beginOfDataReached) and
+    # [`Buffer._endOfDataReached`](#Buffer._endOfDataReached) for details.
+    buffer:
+        topBoundaryTimeout: 10000
+        bottomBoundaryTimeout: 10000
     # Amount of additional (compared to rendered) items that buffer keeps. I.e. if items 57-69 are
     # rendered then buffer will keep data for items 37-89. See
     # [`ScrollerViewport._truncateBuffer`](#ScrollerViewport._truncateBuffer) for details
@@ -50,65 +52,44 @@ insertAfter = (element, target) ->
 
 # ### Scroller Viewport
 #
-# `ScrollerViewport` is `angular.js` controller. It solves two problems:
-# * makes decisions to render or delete items
-# * manages downloads of needed ranges of items
+# `ScrollerViewport` is `angular.js` controller. It tracks current state of bound element and makes
+# decisions to ask for new items, render or delete items.
 #
 # Read [`_updateState`](#ScrollerViewport._updateState) documentation to understand this class state
 # flow.
-#
 class ScrollerViewport
-    # `ScrollerViewport` only requires
-    # [angular.js scope](https://docs.angularjs.org/api/ng/type/$rootScope.Scope)
-    # and bound DOM Node.
-    constructor: (@scope, @_element) ->
-        # Scope may contain `scrollerSettings` property which structure is similar to default
-        # settings.Properties that are not presented in scope.scrollerSettings will be filled with
-        # default settings. Settings are watched therefore any changes will be copied over to
-        # viewport.
-        @_updateSettings()
-        @scope.$watch('scrollerSettings', @_updateSettings, true)
-
-        # Scope must contain function `scope.scrollerSource` which is a data source for viewport.
-        @_getItems = @scope.scrollerSource.bind(this)
+    # `scope`: [`angular.js scope`](https://docs.angularjs.org/api/ng/type/$rootScope.Scope). Used
+    # for communication with [ScrollerItemList](#ScrollerItemList) througe events.
+    #
+    # `element`: `DOM Node` bound to this viewport
+    #
+    # `scrollerSource`: `function`
+    #
+    # `settings`: `object`. Settings object with structure similar to
+    # [default settings](#VIEWPORT_DEFAULT_SETTINGS)
+    constructor: (@scope, @_element, scrollerSource, settings={}) ->
+        @_settings = angular.merge(settings, VIEWPORT_DEFAULT_SETTINGS)
 
         # Viewport keeps track of currently rendered items in format
         # `{index: int, data: data_received_from_source_function}`
         @_drawnItems = []
 
-        # Buffer contains data received from source function. It is used to store more data than
-        # rendered in case user wants to scroll back. However buffer size is limited.
-        @_buffer = new Buffer()
-
-        # Current state is tracked by these variables.
-        @_requesting_top_items = false
-        @_requesting_bottom_items = false
+        # [`Buffer`](#Buffer) caches data from `scrollerSource`
+        @_buffer = new Buffer(scrollerSource, @_settings.buffer)
 
         # First update to start the process. `scroll` event most likely will cause actions to
         # perform. Finally, `_changeAutoUpdateInterval` function sets auto updates for any events
         # we do not track. Better later then never.
         @_updateStateAsync()
         @_element.addEventListener('scroll', @_updateStateAsync)
+        @_changeAutoUpdateInterval(@_settings.autoUpdateInterval)
 
-    # Keeps track of settings changes.
-    _updateSettings: =>
-        new_settings =
-            paddingTop:
-                min: @scope.$eval('scrollerSettings.paddingTop.min') ? VIEWPORT_DEFAULT_SETTINGS.paddingTop.min
-                max: @scope.$eval('scrollerSettings.paddingTop.max') ? VIEWPORT_DEFAULT_SETTINGS.paddingTop.max
-            paddingBottom:
-                min: @scope.$eval('scrollerSettings.paddingBottom.min') ? VIEWPORT_DEFAULT_SETTINGS.paddingBottom.min
-                max: @scope.$eval('scrollerSettings.paddingBottom.max') ? VIEWPORT_DEFAULT_SETTINGS.paddingBottom.max
-            itemsPerRequest: @scope.$eval('scrollerSettings.itemsPerRequest') ? VIEWPORT_DEFAULT_SETTINGS.itemsPerRequest
-            autoUpdateInterval: @scope.$eval('scrollerSettings.autoUpdateInterval') ? VIEWPORT_DEFAULT_SETTINGS.autoUpdateInterval
-            afterScrollWaitTime: @scope.$eval('scrollerSettings.afterScrollWaitTime') ? VIEWPORT_DEFAULT_SETTINGS.afterScrollWaitTime
-            topBoundaryTimeout: @scope.$eval('scrollerSettings.topBoundaryTimeout') ? VIEWPORT_DEFAULT_SETTINGS.topBoundaryTimeout
-            bottomBoundaryTimeout: @scope.$eval('scrollerSettings.bottomBoundaryTimeout') ? VIEWPORT_DEFAULT_SETTINGS.bottomBoundaryTimeout
-            bufferTopPadding: @scope.$eval('scrollerSettings.bufferTopPadding') ? VIEWPORT_DEFAULT_SETTINGS.bufferTopPadding
-            bufferBottomPadding: @scope.$eval('scrollerSettings.bufferBottomPadding') ? VIEWPORT_DEFAULT_SETTINGS.bufferBottomPadding
-        if @_settings?.autoUpdateInterval != new_settings.autoUpdateInterval
-            @_changeAutoUpdateInterval(new_settings.autoUpdateInterval)
-        @_settings = new_settings
+    updateSettings: (settings={}) =>
+        angular.merge(settings, VIEWPORT_DEFAULT_SETTINGS)
+        if @_settings.autoUpdateInterval != settings.autoUpdateInterval
+            @_changeAutoUpdateInterval(settings.autoUpdateInterval)
+        @_settings = settings
+        @_buffer.updateSettings(@_settings.buffer)
 
     # ## <section id='ScrollerViewport._changeAutoUpdateInterval'></section>
     # Sets interval for auto updates. Auto update makes sure we do not miss special or untrackable
@@ -163,6 +144,7 @@ class ScrollerViewport
             @_updateState()
         , 0
 
+    # ## <section id='ScrollerViewport._tryDrawTopItem'></section>
     # Either render existing item or request more items from the top.
     _tryDrawTopItem: =>
         if @_drawnItems.length > 0
@@ -172,8 +154,9 @@ class ScrollerViewport
         if neededIndex of @_buffer
             @_addTopDrawnItem({index: neededIndex, data: @_buffer[neededIndex]})
         else
-            @_requestMoreTopItems()
+            @_buffer.requestMoreTopItems(@_settings.itemsPerRequest, @_updateStateAsync)
 
+    # ## <section id='ScrollerViewport._tryDrawBottomItem'></section>
     # Either render existing item or request more items from the bottom.
     _tryDrawBottomItem: =>
         if @_drawnItems.length > 0
@@ -183,68 +166,7 @@ class ScrollerViewport
         if neededIndex of @_buffer
             @_addBottomDrawnItem({index: neededIndex, data: @_buffer[neededIndex]})
         else
-            @_requestMoreBottomItems()
-
-    # ## <section id='ScrollerViewport._requestMoreTopItems'></section>
-    # Only one request of top items may be active at a time. That ensures that multiple actions like
-    # "scroll to bottom and back to top" does not make multiple requests. Note that no rendering
-    # happens when data arrives. Data is added to the buffer and `@_updateStateAsync` is called.
-    # Errors in data source callback are ignored, but the do not fobid furhter requests of top
-    # items.
-    _requestMoreTopItems: =>
-        return if @_requesting_top_items
-        return if not @_beginOfDataReached()
-        @_requesting_top_items = true
-        start = @_buffer.start - @_settings.itemsPerRequest
-        end = @_buffer.start
-        @_getItems start, @_settings.itemsPerRequest, (err, res) =>
-            @_requesting_top_items = false
-            return if err
-            if res.length == 0
-                @_topBoundaryIndex = end
-                @_topBoundaryIndexTimestamp = new Date()
-            else
-                # FIXME: if buffer gets truncated during request we will break data ordering
-                @_buffer.addItemsToStart(res)
-                if @_buffer.start < @_topBoundaryIndex
-                    @_topBoundaryIndex = null
-                @_updateStateAsync()
-
-    # ## <section id='ScrollerViewport._beginOfDataReached'></section>
-    # This function tracks "begin of data". If we request top items and receive empty result, we
-    # assume that we reached "befin of data". We will not do any requests of top items for some
-    # (configurable) time. After that time requests for top items will be allowed.
-    _beginOfDataReached: =>
-        now = new Date()
-        return not (@_buffer.start == @_topBoundaryIndex &&
-            (now - @_topBoundaryIndexTimestamp < @_settings.topBoundaryTimeout))
-
-    # ## <section id='ScrollerViewport._requestMoreBottomItems'></section>
-    # See `@_requestMoreTopItems` for additional comments
-    _requestMoreBottomItems: =>
-        return if @_requesting_bottom_items
-        return if not @_endOfDataReached()
-        @_requesting_bottom_items = true
-        start = @_buffer.start + @_buffer.length
-        @_getItems start, @_settings.itemsPerRequest, (err, res) =>
-            @_requesting_bottom_items = false
-            return if err
-            if res.length == 0
-                @_bottomBoundaryIndex = start
-                @_bottomBoundaryIndexTimestamp = new Date()
-            else
-                # FIXME: if buffer gets truncated during request we will break data ordering
-                @_buffer.addItemsToEnd(res)
-                if @_buffer.start + @_buffer.length > @_bottomBoundaryIndex
-                    @_bottomBoundaryIndex = null
-                @_updateStateAsync()
-
-    # ## <section id='ScrollerViewport._endOfDataReached'></section>
-    # See `@_beginOfDataReached` for additional comments
-    _endOfDataReached: =>
-        now = new Date()
-        return not (@_buffer.start + @_buffer.length == @_bottomBoundaryIndex &&
-            (now - @_bottomBoundaryIndexTimestamp < @_settings.bottomBoundaryTimeout))
+            @_buffer.requestMoreBottomItems(@_settings.itemsPerRequest, @_updateStateAsync)
 
     # Simply add new item to list of drawn items and send a command to draw this item for all
     # `ScrollerItemList` controllers. Items should be drawn this tick so update on the next tick
@@ -291,7 +213,7 @@ class ScrollerViewport
         @_lastScrollTop = @_element.scrollTop
 
 
-# ### Scroller item list
+# ### <section id='ScrollerItemList'>Scroller item list</section>
 #
 # `ScrollerItemList` is `angular.js` controller. It manages list of items currently rendered in
 # viewport.
@@ -343,15 +265,98 @@ class ScrollerItemList
         @_destroyItem(lastItem)
 
 
-# ### Buffer
+# ### <section id='ScrollerItemList'>Buffer</section>
 #
-# `Buffer` is used to store range of items: `{start: int, length: int}` and every stored index is a
-# key in this object. Buffer assumes that only integer indexes are stored in it. It is capable of
-# extension and truncating.
+# `Buffer` manages items given by source function. It stores range of items in the form of
+# array-like object: `{start: int, length: int}` and every stored index is a key in this object.
+# Buffer assumes that only integer indexes are stored in it. It is capable of extension and
+# truncating stored items.
 class Buffer
-    constructor: ->
+    constructor: (@_getItems, @_settings) ->
         @start = 0
         @length = 0
+        @_counter = 0
+        @_top_items_request_id = null
+        @_bottom_items_request_id = null
+
+    _addItemsToEnd: (items) =>
+        for item, idx in items
+            @[@start + @length + idx] = item
+        @length += items.length
+
+    _addItemsToStart: (items) =>
+        @start -= items.length
+        for item, idx in items
+            @[@start + idx] = item
+        @length += items.length
+
+    updateSettings: (settings) =>
+        @_settings = settings
+
+    # ## <section id='Buffer.requestMoreTopItems'></section>
+    # Only one request of top items may be active at a time. That ensures that multiple actions like
+    # "scroll to bottom and back to top" does not make multiple requests. Note that no rendering
+    # happens when data arrives. Data is added to the buffer and `@_updateStateAsync` is called.
+    # Errors in data source callback are ignored, but they do not forbid further requests of top
+    # items.
+    requestMoreTopItems: (quantity, callback) =>
+        return if @_top_items_request_id?
+        return if @_beginOfDataReached()
+        request_id = @_top_items_request_id = @_counter
+        @_counter += 1
+        start = @start - quantity
+        end = @start
+        @_getItems start, quantity, (err, res) =>
+            # Request has been canceled
+            return if request_id != @_top_items_request_id
+            @_top_items_request_id = null
+            return if err
+            if res.length == 0
+                @_topBoundaryIndex = end
+                @_topBoundaryIndexTimestamp = new Date()
+            else
+                @_addItemsToStart(res)
+                if @start < @_topBoundaryIndex
+                    @_topBoundaryIndex = null
+                callback()
+
+    # ## <section id='Buffer._beginOfDataReached'></section>
+    # This function tracks "begin of data". If we request top items and receive empty result, we
+    # assume that we reached "begin of data". We will not do any requests of top items for some
+    # (configurable) time. After that time requests for top items will be allowed.
+    _beginOfDataReached: =>
+        now = new Date()
+        return @start == @_topBoundaryIndex &&
+            (now - @_topBoundaryIndexTimestamp < @_settings.topBoundaryTimeout)
+
+    # ## <section id='Buffer.requestMoreBottomItems'></section>
+    # See [`@requestMoreTopItems`](#Buffer.requestMoreTopItems) for additional comments
+    requestMoreBottomItems: (quantity, callback) =>
+        return if @_bottom_items_request_id?
+        return if @_endOfDataReached()
+        request_id = @_bottom_items_request_id = @_counter
+        @_counter += 1
+        start = @start + @length
+        @_getItems start, quantity, (err, res) =>
+            # Request has been canceled
+            return if request_id != @_bottom_items_request_id
+            @_bottom_items_request_id = null
+            return if err
+            if res.length == 0
+                @_bottomBoundaryIndex = start
+                @_bottomBoundaryIndexTimestamp = new Date()
+            else
+                @_addItemsToEnd(res)
+                if @start + @length > @_bottomBoundaryIndex
+                    @_bottomBoundaryIndex = null
+                callback()
+
+    # ## <section id='Buffer._endOfDataReached'></section>
+    # See [`@_beginOfDataReached`](#Buffer._beginOfDataReached) for additional comments
+    _endOfDataReached: =>
+        now = new Date()
+        return @start + @length == @_bottomBoundaryIndex &&
+            (now - @_bottomBoundaryIndexTimestamp < @_settings.bottomBoundaryTimeout)
 
     truncateTo: (start, end) =>
         if @start < start
@@ -359,22 +364,17 @@ class Buffer
                 delete @[i]
             @length = Math.max(0, @length - (start - @start))
             @start = start
+            # Cancel current top items request because we created a gap between items in this
+            # request and start of buffer
+            @_top_items_request_id = null
         cur_end = @start + @length - 1
         if cur_end > end
             for i in [cur_end...end]
                 delete @[i]
             @length = Math.max(0, @length - (cur_end - end))
-
-    addItemsToEnd: (items) =>
-        for item, idx in items
-            @[@start + @length + idx] = item
-        @length += items.length
-
-    addItemsToStart: (items) =>
-        @start -= items.length
-        for item, idx in items
-            @[@start + idx] = item
-        @length += items.length
+            # Cancel current bottom items request because we created a gap between items in this
+            # request and end of buffer
+            @_bottom_items_request_id = null
 
 
 angular.module('scroller', [])
@@ -383,7 +383,11 @@ angular.module('scroller', [])
     restrict: 'A'
     scope: {'scrollerSource': '=', 'scrollerSettings': '='}
     controller: ($scope, $element) ->
-        new ScrollerViewport($scope, $element[0])
+        viewportController = new ScrollerViewport($scope, $element[0], $scope.scrollerSource, $scope.scrollerSettings)
+        update_settings = ->
+            viewportController.updateSettings($scope.scrollerSettings)
+        $scope.$watch('scrollerSettings', update_settings, true)
+        return viewportController
 
 .directive 'scrollerItem', ->
     restrict: 'A'
