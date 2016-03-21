@@ -343,14 +343,11 @@
       start = this.start - quantity;
       end = this.start;
       return this._getItems(start, quantity, (function(_this) {
-        return function(err, res) {
+        return function(res) {
           if (request_id !== _this._top_items_request_id) {
             return;
           }
           _this._top_items_request_id = null;
-          if (err) {
-            return;
-          }
           if (res.length === 0) {
             _this._topBoundaryIndex = end;
             return _this._topBoundaryIndexTimestamp = new Date();
@@ -383,14 +380,11 @@
       this._counter += 1;
       start = this.start + this.length;
       return this._getItems(start, quantity, (function(_this) {
-        return function(err, res) {
+        return function(res) {
           if (request_id !== _this._bottom_items_request_id) {
             return;
           }
           _this._bottom_items_request_id = null;
-          if (err) {
-            return;
-          }
           if (res.length === 0) {
             _this._bottomBoundaryIndex = start;
             return _this._bottomBoundaryIndexTimestamp = new Date();

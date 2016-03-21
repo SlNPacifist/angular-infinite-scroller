@@ -304,8 +304,7 @@ class Buffer
 
     # ## <section id='Buffer.requestMoreTopItems'></section>
     # Only one request of top items may be active at a time. That ensures that multiple actions like
-    # "scroll to bottom and back to top" does not make multiple requests. Errors in data source
-    # callback are ignored, they do not forbid further requests of top items.
+    # "scroll to bottom and back to top" does not make multiple requests.
     requestMoreTopItems: (quantity, callback) =>
         return if @_top_items_request_id?
         return if @_beginOfDataReached()
@@ -313,11 +312,10 @@ class Buffer
         @_counter += 1
         start = @start - quantity
         end = @start
-        @_getItems start, quantity, (err, res) =>
+        @_getItems start, quantity, (res) =>
             # Request has been canceled
             return if request_id != @_top_items_request_id
             @_top_items_request_id = null
-            return if err
             if res.length == 0
                 @_topBoundaryIndex = end
                 @_topBoundaryIndexTimestamp = new Date()
@@ -344,11 +342,10 @@ class Buffer
         request_id = @_bottom_items_request_id = @_counter
         @_counter += 1
         start = @start + @length
-        @_getItems start, quantity, (err, res) =>
+        @_getItems start, quantity, (res) =>
             # Request has been canceled
             return if request_id != @_bottom_items_request_id
             @_bottom_items_request_id = null
-            return if err
             if res.length == 0
                 @_bottomBoundaryIndex = start
                 @_bottomBoundaryIndexTimestamp = new Date()

@@ -6,7 +6,7 @@ angular.module('application', ['scroller'])
                 end = index + count
                 index = Math.max(index, 0)
                 end = Math.max(end, 0)
-                callback(null, $scope.data[index...end])
+                callback($scope.data[index...end])
             , 0
     ]
 
