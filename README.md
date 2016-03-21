@@ -46,7 +46,7 @@ rendered range.
 viewport may be arbitrary and scroller-item could be used several times:
 
 ```html
-<div class="editor-body" scroller-viewport scroller-source="getData">
+<div scroller-viewport="getData">
     <div class="numbers"><p scroller-item>{{scrIndex}}</p></div>
     <div class="text"><p scroller-item>{{scrData}}</p></div>
 </div>
@@ -55,13 +55,12 @@ viewport may be arbitrary and scroller-item could be used several times:
 In this example both index and data will be rendered for every item. That is useful when you want to
 render parts of your items in different parts of viewport.
 
-`scroller-source` attribute should refer a `function(index, count, callback)`:
+`scroller-viewport` attribute should refer a `function(index, count, callback)`:
 
 * `index` - integer, could be any integer (even less then zero)
 * `count` - integer, 1 or greater
-* `callback` - `function(err, res)`:
+* `callback` - `function(res)`:
     
-    * `err` if err is set no action is performed
     * `res` should be an array. Items of this array will become scrData.data in scroller-item. `res`
 should contain `count` items starting with `index`.
 

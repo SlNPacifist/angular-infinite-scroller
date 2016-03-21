@@ -63,19 +63,26 @@ class ScrollerViewport
     #
     # `element`: `DOM Node` bound to this viewport
     #
-    # `scrollerSource`: `function`
+    # `source`: `function(start, count, callback)`. This function is called whenever new data is
+    # needed.
+    #
+    # * `start`: `int`
+    # * `count`: `int`
+    # * `callback`: `function(res)`. Callback should be called when needed data is ready.
+    #  * `res`: `array`. Should contain `count` items in it. If request hit boundary of data, `res`
+    #     can contain less then `count` data or even no data at all.
     #
     # `settings`: `object`. Settings object with structure similar to
     # [default settings](#VIEWPORT_DEFAULT_SETTINGS)
-    constructor: (@scope, @_element, scrollerSource, settings={}) ->
+    constructor: (@scope, @_element, source, settings={}) ->
         @_settings = angular.merge(settings, VIEWPORT_DEFAULT_SETTINGS)
 
         # Viewport keeps track of currently rendered items in format
         # `{index: int, data: data_received_from_source_function}`
         @_drawnItems = []
 
-        # [`Buffer`](#Buffer) caches data from `scrollerSource`
-        @_buffer = new Buffer(scrollerSource, @_settings.buffer)
+        # [`Buffer`](#Buffer) caches data from `source`
+        @_buffer = new Buffer(source, @_settings.buffer)
 
         # First update to start the process. `scroll` event most likely will cause actions to
         # perform. Finally, `_changeAutoUpdateInterval` function sets auto updates for any events
@@ -90,6 +97,12 @@ class ScrollerViewport
             @_changeAutoUpdateInterval(settings.autoUpdateInterval)
         @_settings = settings
         @_buffer.updateSettings(@_settings.buffer)
+
+    updateSource: (source) =>
+        @_buffer.destroy()
+        @_buffer = new Buffer(source, @_settings.buffer)
+        @_drawnItems = []
+        @scope.$broadcast('clear')
 
     # ## <section id='ScrollerViewport._changeAutoUpdateInterval'></section>
     # Sets interval for auto updates. Auto update makes sure we do not miss special or untrackable
@@ -175,13 +188,13 @@ class ScrollerViewport
     # will see changes and will be able to make new decisions.
     _addTopDrawnItem: (item) =>
         @_drawnItems = [item].concat(@_drawnItems)
-        @scope.$broadcast('top-item-rendered', item)
+        @scope.$broadcast('render-top-item', item)
         @_updateStateAsync()
 
     # See `@_addTopDrawnItem` for additional comments.
     _addBottomDrawnItem: (item) =>
         @_drawnItems.push(item)
-        @scope.$broadcast('bottom-item-rendered', item)
+        @scope.$broadcast('render-bottom-item', item)
         @_updateStateAsync()
 
     # ## <section id='ScrollerViewport._truncateBuffer'></section>
@@ -194,13 +207,13 @@ class ScrollerViewport
 
     _removeTopDrawnItem: =>
         @_drawnItems = @_drawnItems[1..]
-        @scope.$broadcast('top-item-removed')
+        @scope.$broadcast('remove-top-item')
         @_truncateBuffer()
         @_updateStateAsync()
 
     _removeBottomDrawnItem: =>
         @_drawnItems.pop()
-        @scope.$broadcast('bottom-item-removed')
+        @scope.$broadcast('remove-bottom-item')
         @_truncateBuffer()
         @_updateStateAsync()
 
@@ -231,10 +244,11 @@ class ScrollerViewport
 class ScrollerItemList
     constructor: (@_$element, @_viewportController, @_$transclude) ->
         @_renderedItems = []
-        @_viewportController.scope.$on('top-item-rendered', (_, source) => @_addTopItem(source))
-        @_viewportController.scope.$on('bottom-item-rendered', (_, source) => @_addBottomItem(source))
-        @_viewportController.scope.$on('top-item-removed', @_removeTopItem)
-        @_viewportController.scope.$on('bottom-item-removed', @_removeBottomItem)
+        @_viewportController.scope.$on('render-top-item', (_, source) => @_addTopItem(source))
+        @_viewportController.scope.$on('render-bottom-item', (_, source) => @_addBottomItem(source))
+        @_viewportController.scope.$on('remove-top-item', @_removeTopItem)
+        @_viewportController.scope.$on('remove-bottom-item', @_removeBottomItem)
+        @_viewportController.scope.$on('clear', @_clear)
 
     _createItem: (source, insert_point) =>
         item = {scope: null, clone: null}
@@ -270,8 +284,11 @@ class ScrollerItemList
 
     _removeBottomItem: =>
         return if @_renderedItems.length == 0
-        lastItem = @_renderedItems.pop()
-        @_destroyItem(lastItem)
+        @_destroyItem(@_renderedItems.pop())
+
+    _clear: =>
+        @_destroyItem(item) for item in @_renderedItems
+        @_renderedItems = []
 
 
 # ### <section id='ScrollerItemList'>Buffer</section>
@@ -380,17 +397,27 @@ class Buffer
             # request and end of buffer
             @_bottomItemsRequestId = null
 
+    # Called when data source changes
+    destroy: =>
+        @_topItemsRequestId = null
+        @_bottomItemsRequestId = null
+
 
 angular.module('scroller', [])
 
 .directive 'scrollerViewport', ->
     restrict: 'A'
-    scope: {'scrollerSource': '=', 'scrollerSettings': '='}
+    scope: {'scrollerViewport': '=', 'scrollerSettings': '='}
     controller: ($scope, $element) ->
-        viewportController = new ScrollerViewport($scope, $element[0], $scope.scrollerSource, $scope.scrollerSettings)
+        viewportController = new ScrollerViewport($scope, $element[0], $scope.scrollerViewport, $scope.scrollerSettings)
         update_settings = ->
             viewportController.updateSettings($scope.scrollerSettings)
         $scope.$watch('scrollerSettings', update_settings, true)
+        oldSource = $scope.scrollerViewport
+        $scope.$watch 'scrollerViewport', ->
+            return if oldSource == $scope.scrollerViewport
+            oldSource = $scope.scrollerViewport
+            viewportController.updateSource($scope.scrollerViewport)
         return viewportController
 
 .directive 'scrollerItem', ->
