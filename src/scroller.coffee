@@ -207,9 +207,11 @@ class ScrollerViewport
     # adding or removing of top items and compensate difference.
     preserveScroll: (action) =>
         heightBefore = @_element.scrollHeight
+        scrollBefore = @_element.scrollTop
         action()
-        delta = @_element.scrollHeight - heightBefore
-        @_element.scrollTop += delta
+        heightDelta = @_element.scrollHeight - heightBefore
+        scrollDelta = @_element.scrollTop - scrollBefore
+        @_element.scrollTop += heightDelta - scrollDelta
         @_lastScrollTop = @_element.scrollTop
 
 

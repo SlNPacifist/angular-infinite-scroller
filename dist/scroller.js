@@ -184,11 +184,13 @@
     };
 
     ScrollerViewport.prototype.preserveScroll = function(action) {
-      var delta, heightBefore;
+      var heightBefore, heightDelta, scrollBefore, scrollDelta;
       heightBefore = this._element.scrollHeight;
+      scrollBefore = this._element.scrollTop;
       action();
-      delta = this._element.scrollHeight - heightBefore;
-      this._element.scrollTop += delta;
+      heightDelta = this._element.scrollHeight - heightBefore;
+      scrollDelta = this._element.scrollTop - scrollBefore;
+      this._element.scrollTop += heightDelta - scrollDelta;
       return this._lastScrollTop = this._element.scrollTop;
     };
 
