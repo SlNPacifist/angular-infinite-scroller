@@ -22,28 +22,50 @@ Include minified scroller file in your template:
 or full version:
 
 ```html
-    <script src="/bower_components/angular-infinite-scroller/dist/scroller.min.js" type="text/javascript"></script>
+    <script src="/bower_components/angular-infinite-scroller/dist/scroller.js" type="text/javascript"></script>
 ```
 
 List module 'scroller' in your app module dependencies:
 ```javascript
-    var myApp = angular.module('myApp', ['ui.scroll', ...]);
+    var myApp = angular.module('myApp', ['scroller', ...]);
 ```
 
 Now you can use directives:
 
 ```html
-<ANY scroller-viewport scroller-source="getData" scroller-settings="scrollerViewportSettings">
+<ANY scroller-viewport="getData" scroller-settings="scrollerSettings">
     <ANY scroller-item>{{scrIndex}} {{scrData}}</ANY>
 </ANY>
 ```
 
 `scroller-viewport` is a directive that manages data: it measures scroll position inside of bound
 element and makes decision to render or delete new items at the beginning or at the end of
-rendered range.
+rendered range. It adds state data to scope:
 
-`scroller-item` is a directive that is repeated for every rendered item. Note that contents of
-viewport may be arbitrary and scroller-item could be used several times:
+* `scrLoadingTop`: true if current request for top data is active.
+* `scrReachedTop`: true if top of data is reached. Note that this state is temporary: after some
+time viewport will drop this state and request top data once again. Timeout is configurable.
+* `scrLoadingBottom`: like `scrLoadingTop` but for bottom data.
+* `scrReachedBottom`: like `scrReachedTop` but for bottom data.
+
+Next combinations of states are possible:
+
+* `!loading & !reached`: possible during initialization, when no data is needed (enough data in
+specified direction is loaded and boundary is not reached) or just after boundary timeout: for
+example, top boundary was hit, after some timeout viewport will re-check top boundary and it first
+drops top boundary flag and only after that it start new request for top data.
+* `loading & !reached`: viewport needs more data and top boundary was not reached.
+* `!loading & reached`: top boundary was reached.
+* `loading & reached`: only possible if configuration changes. If `buffer.topBoundaryTimeout` or
+`buffer.bottomBoundaryTimeout` changes to a bigger value it is possible that request for data is
+performed and old boundary becomes valid again.  
+
+`scroller-item` is a directive that is repeated for every rendered item. It adds item data to scope:
+
+* `scrIndex`: `int`, index of current item
+* `scrData`: data that was received from `getData` function
+
+Note that contents of viewport may be arbitrary and scroller-item could be used several times:
 
 ```html
 <div scroller-viewport="getData">
@@ -61,8 +83,8 @@ render parts of your items in different parts of viewport.
 * `count` - integer, 1 or greater
 * `callback` - `function(res)`:
     
-    * `res` should be an array. Items of this array will become scrData.data in scroller-item. `res`
-should contain `count` items starting with `index`.
+    * `res` should be an array. Items of this array will become scrData in scroller-item. `res`
+should contain `count` items.
 
 ### Known issues
 

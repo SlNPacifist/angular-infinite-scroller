@@ -377,6 +377,7 @@
     Buffer.prototype.updateSettings = function(settings) {
       var delta;
       this._settings = settings;
+      this._onStateChange();
       if (this._topBoundaryIndex != null) {
         delta = (this._topBoundaryIndexTimestamp - new Date()) + settings.topBoundaryTimeout;
         setTimeout(this._onStateChange, delta);

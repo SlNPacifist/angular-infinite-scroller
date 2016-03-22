@@ -358,6 +358,7 @@ class Buffer
     updateSettings: (settings) =>
         @_settings = settings
         # make sure changes in settings change our state properly
+        @_onStateChange()
         if @_topBoundaryIndex?
             delta = (@_topBoundaryIndexTimestamp - new Date()) + settings.topBoundaryTimeout
             setTimeout(@_onStateChange, delta)
