@@ -50,7 +50,7 @@ insertAfter = (element, target) ->
         parent.appendChild(element)
 
 
-# ### Scroller Viewport
+# ### <section id='ScrollerViewport'>Scroller Viewport</section>
 #
 # `ScrollerViewport` is `angular.js` controller. It tracks current state of bound element and makes
 # decisions to ask for new items, render or delete items.
@@ -82,7 +82,7 @@ class ScrollerViewport
         @_drawnItems = []
 
         # [`Buffer`](#Buffer) caches data from `source`
-        @_buffer = new Buffer(source, @_settings.buffer)
+        @_buffer = new Buffer(source, @_settings.buffer, @_updateBufferState)
 
         # First update to start the process. `scroll` event most likely will cause actions to
         # perform. Finally, `_changeAutoUpdateInterval` function sets auto updates for any events
@@ -100,9 +100,15 @@ class ScrollerViewport
 
     updateSource: (source) =>
         @_buffer.destroy()
-        @_buffer = new Buffer(source, @_settings.buffer)
+        @_buffer = new Buffer(source, @_settings.buffer, @_updateBufferState)
         @_drawnItems = []
         @scope.$broadcast('clear')
+
+    # Updates buffer-related state (loading top, loading bottom, etc) in scope
+    _updateBufferState: =>
+        @scope.$applyAsync =>
+            @scope.scrLoadingTop = @_buffer.topIsLoading()
+            @scope.scrLoadingBottom = @_buffer.bottomIsLoading()
 
     # ## <section id='ScrollerViewport._changeAutoUpdateInterval'></section>
     # Sets interval for auto updates. Auto update makes sure we do not miss special or untrackable
@@ -298,23 +304,24 @@ class ScrollerItemList
 # Buffer assumes that only integer indexes are stored in it. It is capable of extension and
 # truncating stored items.
 class Buffer
-    constructor: (@_getItems, @_settings) ->
+    # `getItems`: `function(start, count, callback)`. See [`ScrollerViewport`](#ScrollerViewport)
+    # constructor for details
+    #
+    # `settings`: `object`
+    # * `topBoundaryTimeout`: amount of time (ms) when hitting top boundary is considered valid.
+    # After that time requests for top items will be allowed.
+    # * `bottomBoundaryTimeout`: same as top `bottomBoundaryTimeout`, but for bottom boundary.
+    #
+    # `onStateChange`: `function()`. Called when buffer state (top boundary hit, loading top,
+    # bottom boundary hit, loading bottom) could be changed. Called in constructor. Not called in
+    # destructor
+    constructor: (@_getItems, @_settings, @_onStateChange) ->
         @start = 0
         @length = 0
         @_counter = 0
         @_topItemsRequestId = null
         @_bottomItemsRequestId = null
-
-    _addItemsToEnd: (items) =>
-        for item, idx in items
-            @[@start + @length + idx] = item
-        @length += items.length
-
-    _addItemsToStart: (items) =>
-        @start -= items.length
-        for item, idx in items
-            @[@start + idx] = item
-        @length += items.length
+        @_onStateChange()
 
     updateSettings: (settings) =>
         @_settings = settings
@@ -325,14 +332,14 @@ class Buffer
     requestMoreTopItems: (quantity, callback) =>
         return if @_topItemsRequestId?
         return if @_beginOfDataReached()
-        request_id = @_topItemsRequestId = @_counter
-        @_counter += 1
+        @_startTopRequest()
+        request_id = @_topItemsRequestId
         start = @start - quantity
         end = @start
         @_getItems start, quantity, (res) =>
             # Request has been canceled
             return if request_id != @_topItemsRequestId
-            @_topItemsRequestId = null
+            @_stopTopRequest()
             if res.length == 0
                 @_topBoundaryIndex = end
                 @_topBoundaryIndexTimestamp = new Date()
@@ -351,18 +358,35 @@ class Buffer
         return @start == @_topBoundaryIndex &&
             (now - @_topBoundaryIndexTimestamp < @_settings.topBoundaryTimeout)
 
+    # Allocate new request id and make everyone know we're changing state
+    _startTopRequest: =>
+        @_topItemsRequestId = @_counter
+        @_counter += 1
+        @_onStateChange()
+
+    _stopTopRequest: =>
+        return if @_topItemsRequestId is null
+        @_topItemsRequestId = null
+        @_onStateChange()
+
+    _addItemsToStart: (items) =>
+        @start -= items.length
+        for item, idx in items
+            @[@start + idx] = item
+        @length += items.length
+
     # ## <section id='Buffer.requestMoreBottomItems'></section>
     # See [`@requestMoreTopItems`](#Buffer.requestMoreTopItems) for additional comments
     requestMoreBottomItems: (quantity, callback) =>
         return if @_bottomItemsRequestId?
         return if @_endOfDataReached()
-        request_id = @_bottomItemsRequestId = @_counter
-        @_counter += 1
+        @_startBottomRequest()
+        request_id = @_bottomItemsRequestId
         start = @start + @length
         @_getItems start, quantity, (res) =>
             # Request has been canceled
             return if request_id != @_bottomItemsRequestId
-            @_bottomItemsRequestId = null
+            @_stopBottomRequest()
             if res.length == 0
                 @_bottomBoundaryIndex = start
                 @_bottomBoundaryIndexTimestamp = new Date()
@@ -379,6 +403,22 @@ class Buffer
         return @start + @length == @_bottomBoundaryIndex &&
             (now - @_bottomBoundaryIndexTimestamp < @_settings.bottomBoundaryTimeout)
 
+    # Allocate new request id and make everyone know we're changing state
+    _startBottomRequest: =>
+        @_bottomItemsRequestId = @_counter
+        @_counter += 1
+        @_onStateChange()
+
+    _stopBottomRequest: =>
+        return if @_bottomItemsRequestId is null
+        @_bottomItemsRequestId = null
+        @_onStateChange()
+
+    _addItemsToEnd: (items) =>
+        for item, idx in items
+            @[@start + @length + idx] = item
+        @length += items.length
+
     truncateTo: (start, end) =>
         if @start < start
             for i in [@start...start]
@@ -387,7 +427,7 @@ class Buffer
             @start = start
             # Cancel current top items request because we created a gap between items in this
             # request and start of buffer
-            @_topItemsRequestId = null
+            @_stopTopRequest()
         cur_end = @start + @length - 1
         if cur_end > end
             for i in [cur_end...end]
@@ -395,7 +435,11 @@ class Buffer
             @length = Math.max(0, @length - (cur_end - end))
             # Cancel current bottom items request because we created a gap between items in this
             # request and end of buffer
-            @_bottomItemsRequestId = null
+            @_stopBottomRequest()
+
+    topIsLoading: => @_topItemsRequestId?
+
+    bottomIsLoading: => @_bottomItemsRequestId?
 
     # Called when data source changes
     destroy: =>
@@ -407,17 +451,18 @@ angular.module('scroller', [])
 
 .directive 'scrollerViewport', ->
     restrict: 'A'
-    scope: {'scrollerViewport': '=', 'scrollerSettings': '='}
-    controller: ($scope, $element) ->
-        viewportController = new ScrollerViewport($scope, $element[0], $scope.scrollerViewport, $scope.scrollerSettings)
-        update_settings = ->
-            viewportController.updateSettings($scope.scrollerSettings)
-        $scope.$watch('scrollerSettings', update_settings, true)
-        oldSource = $scope.scrollerViewport
-        $scope.$watch 'scrollerViewport', ->
-            return if oldSource == $scope.scrollerViewport
-            oldSource = $scope.scrollerViewport
-            viewportController.updateSource($scope.scrollerViewport)
+    scope: true
+    controller: ($scope, $element, $attrs) ->
+        viewportController = new ScrollerViewport(
+            $scope, $element[0], $scope[$attrs.scrollerViewport], $scope[$attrs.scrollerSettings])
+
+        $scope.$watch $attrs.scrollerSettings, (newVal) ->
+            viewportController.updateSettings(newVal)
+        , true
+
+        $scope.$watch $attrs.scrollerViewport, (newVal, oldVal)->
+            return if newVal == oldVal
+            viewportController.updateSource(newVal)
         return viewportController
 
 .directive 'scrollerItem', ->
@@ -425,6 +470,6 @@ angular.module('scroller', [])
     priority: 1000
     require: '^^scrollerViewport'
     transclude: 'element'
-    scope: {}
+    scope: true
     link: ($scope, $element, $attrs, viewportCtrl, $transclude) ->
         new ScrollerItemList($element, viewportCtrl, $transclude)

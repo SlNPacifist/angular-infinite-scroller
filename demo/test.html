@@ -7,7 +7,6 @@
     <script src="./example.coffee" type="text/coffeescript"></script>
     <style>
       .editor-body {
-        position: relative;
         max-height: 500px;
         overflow-y: auto;
       }
@@ -17,11 +16,12 @@
       .numbers {
         position: absolute;
         width: 20px;
-        left: 0;
+        left: -20px;
         top: 0;
       }
       .text {
         margin-left: 20px;
+        position: relative;
       }
       .numbers, .text {
         font-family: monospace;
@@ -29,10 +29,20 @@
     </style>
   </head>
   <body ng-controller="mainController">
-    <p>Simple text test here</p>
+    <h1>Example of "scroller" usage</h1>
     <div class="editor-body" scroller-viewport="getData">
-      <div class="numbers"><p scroller-item>{{scrIndex}}</p></div>
-      <div class="text"><p scroller-item>{{scrData}}</p></div>
+      <div>
+        <p ng-show="scrLoadingTop">Top data is loading...</p>
+        <p ng-show="!scrLoadingTop">&nbsp</p>
+      </div>
+      <div class="text">
+        <div class="numbers"><p scroller-item>{{scrIndex}}</p></div>
+        <p scroller-item>{{scrData}}</p>
+      </div>
+      <div>
+        <p ng-show="scrLoadingBottom">Bottom data is loading...</p>
+        <p ng-show="!scrLoadingBottom">&nbsp</p>
+      </div>
     </div>
   </body>
 </html>

@@ -7,7 +7,7 @@ angular.module('application', ['scroller'])
                 index = Math.max(index, 0)
                 end = Math.max(end, 0)
                 callback($scope.data[index...end])
-            , 0
+            , 2000
     ]
 
 angular.bootstrap(document, ["application"])

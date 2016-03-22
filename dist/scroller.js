@@ -51,11 +51,12 @@
       this._updateStateAsync = bind(this._updateStateAsync, this);
       this._updateState = bind(this._updateState, this);
       this._changeAutoUpdateInterval = bind(this._changeAutoUpdateInterval, this);
+      this._updateBufferState = bind(this._updateBufferState, this);
       this.updateSource = bind(this.updateSource, this);
       this.updateSettings = bind(this.updateSettings, this);
       this._settings = angular.merge(settings, VIEWPORT_DEFAULT_SETTINGS);
       this._drawnItems = [];
-      this._buffer = new Buffer(source, this._settings.buffer);
+      this._buffer = new Buffer(source, this._settings.buffer, this._updateBufferState);
       this._updateStateAsync();
       this._element.addEventListener('scroll', this._updateStateAsync);
       this._changeAutoUpdateInterval(this._settings.autoUpdateInterval);
@@ -75,9 +76,18 @@
 
     ScrollerViewport.prototype.updateSource = function(source) {
       this._buffer.destroy();
-      this._buffer = new Buffer(source, this._settings.buffer);
+      this._buffer = new Buffer(source, this._settings.buffer, this._updateBufferState);
       this._drawnItems = [];
       return this.scope.$broadcast('clear');
+    };
+
+    ScrollerViewport.prototype._updateBufferState = function() {
+      return this.scope.$applyAsync((function(_this) {
+        return function() {
+          _this.scope.scrLoadingTop = _this._buffer.topIsLoading();
+          return _this.scope.scrLoadingBottom = _this._buffer.bottomIsLoading();
+        };
+      })(this));
     };
 
     ScrollerViewport.prototype._changeAutoUpdateInterval = function(interval) {
@@ -307,43 +317,32 @@
   })();
 
   Buffer = (function() {
-    function Buffer(_getItems, _settings) {
+    function Buffer(_getItems, _settings, _onStateChange) {
       this._getItems = _getItems;
       this._settings = _settings;
+      this._onStateChange = _onStateChange;
       this.destroy = bind(this.destroy, this);
+      this.bottomIsLoading = bind(this.bottomIsLoading, this);
+      this.topIsLoading = bind(this.topIsLoading, this);
       this.truncateTo = bind(this.truncateTo, this);
+      this._addItemsToEnd = bind(this._addItemsToEnd, this);
+      this._stopBottomRequest = bind(this._stopBottomRequest, this);
+      this._startBottomRequest = bind(this._startBottomRequest, this);
       this._endOfDataReached = bind(this._endOfDataReached, this);
       this.requestMoreBottomItems = bind(this.requestMoreBottomItems, this);
+      this._addItemsToStart = bind(this._addItemsToStart, this);
+      this._stopTopRequest = bind(this._stopTopRequest, this);
+      this._startTopRequest = bind(this._startTopRequest, this);
       this._beginOfDataReached = bind(this._beginOfDataReached, this);
       this.requestMoreTopItems = bind(this.requestMoreTopItems, this);
       this.updateSettings = bind(this.updateSettings, this);
-      this._addItemsToStart = bind(this._addItemsToStart, this);
-      this._addItemsToEnd = bind(this._addItemsToEnd, this);
       this.start = 0;
       this.length = 0;
       this._counter = 0;
       this._topItemsRequestId = null;
       this._bottomItemsRequestId = null;
+      this._onStateChange();
     }
-
-    Buffer.prototype._addItemsToEnd = function(items) {
-      var idx, item, j, len;
-      for (idx = j = 0, len = items.length; j < len; idx = ++j) {
-        item = items[idx];
-        this[this.start + this.length + idx] = item;
-      }
-      return this.length += items.length;
-    };
-
-    Buffer.prototype._addItemsToStart = function(items) {
-      var idx, item, j, len;
-      this.start -= items.length;
-      for (idx = j = 0, len = items.length; j < len; idx = ++j) {
-        item = items[idx];
-        this[this.start + idx] = item;
-      }
-      return this.length += items.length;
-    };
 
     Buffer.prototype.updateSettings = function(settings) {
       return this._settings = settings;
@@ -357,8 +356,8 @@
       if (this._beginOfDataReached()) {
         return;
       }
-      request_id = this._topItemsRequestId = this._counter;
-      this._counter += 1;
+      this._startTopRequest();
+      request_id = this._topItemsRequestId;
       start = this.start - quantity;
       end = this.start;
       return this._getItems(start, quantity, (function(_this) {
@@ -366,7 +365,7 @@
           if (request_id !== _this._topItemsRequestId) {
             return;
           }
-          _this._topItemsRequestId = null;
+          _this._stopTopRequest();
           if (res.length === 0) {
             _this._topBoundaryIndex = end;
             return _this._topBoundaryIndexTimestamp = new Date();
@@ -387,6 +386,30 @@
       return this.start === this._topBoundaryIndex && (now - this._topBoundaryIndexTimestamp < this._settings.topBoundaryTimeout);
     };
 
+    Buffer.prototype._startTopRequest = function() {
+      this._topItemsRequestId = this._counter;
+      this._counter += 1;
+      return this._onStateChange();
+    };
+
+    Buffer.prototype._stopTopRequest = function() {
+      if (this._topItemsRequestId === null) {
+        return;
+      }
+      this._topItemsRequestId = null;
+      return this._onStateChange();
+    };
+
+    Buffer.prototype._addItemsToStart = function(items) {
+      var idx, item, j, len;
+      this.start -= items.length;
+      for (idx = j = 0, len = items.length; j < len; idx = ++j) {
+        item = items[idx];
+        this[this.start + idx] = item;
+      }
+      return this.length += items.length;
+    };
+
     Buffer.prototype.requestMoreBottomItems = function(quantity, callback) {
       var request_id, start;
       if (this._bottomItemsRequestId != null) {
@@ -395,15 +418,15 @@
       if (this._endOfDataReached()) {
         return;
       }
-      request_id = this._bottomItemsRequestId = this._counter;
-      this._counter += 1;
+      this._startBottomRequest();
+      request_id = this._bottomItemsRequestId;
       start = this.start + this.length;
       return this._getItems(start, quantity, (function(_this) {
         return function(res) {
           if (request_id !== _this._bottomItemsRequestId) {
             return;
           }
-          _this._bottomItemsRequestId = null;
+          _this._stopBottomRequest();
           if (res.length === 0) {
             _this._bottomBoundaryIndex = start;
             return _this._bottomBoundaryIndexTimestamp = new Date();
@@ -424,6 +447,29 @@
       return this.start + this.length === this._bottomBoundaryIndex && (now - this._bottomBoundaryIndexTimestamp < this._settings.bottomBoundaryTimeout);
     };
 
+    Buffer.prototype._startBottomRequest = function() {
+      this._bottomItemsRequestId = this._counter;
+      this._counter += 1;
+      return this._onStateChange();
+    };
+
+    Buffer.prototype._stopBottomRequest = function() {
+      if (this._bottomItemsRequestId === null) {
+        return;
+      }
+      this._bottomItemsRequestId = null;
+      return this._onStateChange();
+    };
+
+    Buffer.prototype._addItemsToEnd = function(items) {
+      var idx, item, j, len;
+      for (idx = j = 0, len = items.length; j < len; idx = ++j) {
+        item = items[idx];
+        this[this.start + this.length + idx] = item;
+      }
+      return this.length += items.length;
+    };
+
     Buffer.prototype.truncateTo = function(start, end) {
       var cur_end, i, j, k, ref, ref1, ref2, ref3;
       if (this.start < start) {
@@ -432,7 +478,7 @@
         }
         this.length = Math.max(0, this.length - (start - this.start));
         this.start = start;
-        this._topItemsRequestId = null;
+        this._stopTopRequest();
       }
       cur_end = this.start + this.length - 1;
       if (cur_end > end) {
@@ -440,8 +486,16 @@
           delete this[i];
         }
         this.length = Math.max(0, this.length - (cur_end - end));
-        return this._bottomItemsRequestId = null;
+        return this._stopBottomRequest();
       }
+    };
+
+    Buffer.prototype.topIsLoading = function() {
+      return this._topItemsRequestId != null;
+    };
+
+    Buffer.prototype.bottomIsLoading = function() {
+      return this._bottomItemsRequestId != null;
     };
 
     Buffer.prototype.destroy = function() {
@@ -456,24 +510,18 @@
   angular.module('scroller', []).directive('scrollerViewport', function() {
     return {
       restrict: 'A',
-      scope: {
-        'scrollerViewport': '=',
-        'scrollerSettings': '='
-      },
-      controller: function($scope, $element) {
-        var oldSource, update_settings, viewportController;
-        viewportController = new ScrollerViewport($scope, $element[0], $scope.scrollerViewport, $scope.scrollerSettings);
-        update_settings = function() {
-          return viewportController.updateSettings($scope.scrollerSettings);
-        };
-        $scope.$watch('scrollerSettings', update_settings, true);
-        oldSource = $scope.scrollerViewport;
-        $scope.$watch('scrollerViewport', function() {
-          if (oldSource === $scope.scrollerViewport) {
+      scope: true,
+      controller: function($scope, $element, $attrs) {
+        var viewportController;
+        viewportController = new ScrollerViewport($scope, $element[0], $scope[$attrs.scrollerViewport], $scope[$attrs.scrollerSettings]);
+        $scope.$watch($attrs.scrollerSettings, function(newVal) {
+          return viewportController.updateSettings(newVal);
+        }, true);
+        $scope.$watch($attrs.scrollerViewport, function(newVal, oldVal) {
+          if (newVal === oldVal) {
             return;
           }
-          oldSource = $scope.scrollerViewport;
-          return viewportController.updateSource($scope.scrollerViewport);
+          return viewportController.updateSource(newVal);
         });
         return viewportController;
       }
@@ -484,7 +532,7 @@
       priority: 1000,
       require: '^^scrollerViewport',
       transclude: 'element',
-      scope: {},
+      scope: true,
       link: function($scope, $element, $attrs, viewportCtrl, $transclude) {
         return new ScrollerItemList($element, viewportCtrl, $transclude);
       }
