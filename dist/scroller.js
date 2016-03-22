@@ -54,9 +54,13 @@
       this._updateBufferState = bind(this._updateBufferState, this);
       this.updateSource = bind(this.updateSource, this);
       this.updateSettings = bind(this.updateSettings, this);
-      this._settings = angular.merge(settings, VIEWPORT_DEFAULT_SETTINGS);
+      this._settings = angular.merge({}, VIEWPORT_DEFAULT_SETTINGS, settings);
       this._drawnItems = [];
       this._buffer = new Buffer(source, this._settings.buffer, this._updateBufferState);
+      this._autoUpdateHandler = null;
+      this._updatePlanned = false;
+      this._lastScrollTop = null;
+      this._lastScrollTopChange = null;
       this._updateStateAsync();
       this._element.addEventListener('scroll', this._updateStateAsync);
       this._changeAutoUpdateInterval(this._settings.autoUpdateInterval);
@@ -66,7 +70,7 @@
       if (settings == null) {
         settings = {};
       }
-      angular.merge(settings, VIEWPORT_DEFAULT_SETTINGS);
+      settings = angular.merge({}, VIEWPORT_DEFAULT_SETTINGS, settings);
       if (this._settings.autoUpdateInterval !== settings.autoUpdateInterval) {
         this._changeAutoUpdateInterval(settings.autoUpdateInterval);
       }
@@ -82,10 +86,23 @@
     };
 
     ScrollerViewport.prototype._updateBufferState = function() {
+      var oldReachedBottom, oldReachedTop;
+      oldReachedTop = null;
+      oldReachedBottom = null;
       return this.scope.$applyAsync((function(_this) {
         return function() {
           _this.scope.scrLoadingTop = _this._buffer.topIsLoading();
-          return _this.scope.scrLoadingBottom = _this._buffer.bottomIsLoading();
+          _this.scope.scrReachedTop = _this._buffer.beginOfDataReached();
+          _this.scope.scrLoadingBottom = _this._buffer.bottomIsLoading();
+          _this.scope.scrReachedBottom = _this._buffer.endOfDataReached();
+          if (oldReachedTop !== _this.scope.scrReachedTop) {
+            _this._updateStateAsync();
+            oldReachedTop = _this.scope.scrReachedTop;
+          }
+          if (oldReachedBottom !== _this.scope.scrReachedBottom) {
+            _this._updateStateAsync();
+            return oldReachedBottom = _this.scope.scrReachedBottom;
+          }
         };
       })(this));
     };
@@ -169,7 +186,7 @@
     };
 
     ScrollerViewport.prototype._addTopDrawnItem = function(item) {
-      this._drawnItems = [item].concat(this._drawnItems);
+      this._drawnItems.unshift(item);
       this.scope.$broadcast('render-top-item', item);
       return this._updateStateAsync();
     };
@@ -188,7 +205,7 @@
     };
 
     ScrollerViewport.prototype._removeTopDrawnItem = function() {
-      this._drawnItems = this._drawnItems.slice(1);
+      this._drawnItems.shift();
       this.scope.$broadcast('remove-top-item');
       this._truncateBuffer();
       return this._updateStateAsync();
@@ -317,23 +334,27 @@
   })();
 
   Buffer = (function() {
-    function Buffer(_getItems, _settings, _onStateChange) {
+    function Buffer(_getItems, _settings, _originalStateChange) {
       this._getItems = _getItems;
       this._settings = _settings;
-      this._onStateChange = _onStateChange;
+      this._originalStateChange = _originalStateChange;
       this.destroy = bind(this.destroy, this);
       this.bottomIsLoading = bind(this.bottomIsLoading, this);
       this.topIsLoading = bind(this.topIsLoading, this);
       this.truncateTo = bind(this.truncateTo, this);
       this._addItemsToEnd = bind(this._addItemsToEnd, this);
+      this._unmarkBottomBoundary = bind(this._unmarkBottomBoundary, this);
+      this._markBottomBoundary = bind(this._markBottomBoundary, this);
       this._stopBottomRequest = bind(this._stopBottomRequest, this);
       this._startBottomRequest = bind(this._startBottomRequest, this);
-      this._endOfDataReached = bind(this._endOfDataReached, this);
+      this.endOfDataReached = bind(this.endOfDataReached, this);
       this.requestMoreBottomItems = bind(this.requestMoreBottomItems, this);
       this._addItemsToStart = bind(this._addItemsToStart, this);
+      this._unmarkTopBoundary = bind(this._unmarkTopBoundary, this);
+      this._markTopBoundary = bind(this._markTopBoundary, this);
       this._stopTopRequest = bind(this._stopTopRequest, this);
       this._startTopRequest = bind(this._startTopRequest, this);
-      this._beginOfDataReached = bind(this._beginOfDataReached, this);
+      this.beginOfDataReached = bind(this.beginOfDataReached, this);
       this.requestMoreTopItems = bind(this.requestMoreTopItems, this);
       this.updateSettings = bind(this.updateSettings, this);
       this.start = 0;
@@ -341,11 +362,29 @@
       this._counter = 0;
       this._topItemsRequestId = null;
       this._bottomItemsRequestId = null;
+      this._topBoundaryIndex = null;
+      this._topBoundaryIndexTimestamp = null;
+      this._bottomBoundaryIndex = null;
+      this._bottomBoundaryIndexTimestamp = null;
+      this._onStateChange = (function(_this) {
+        return function() {
+          return _this._originalStateChange();
+        };
+      })(this);
       this._onStateChange();
     }
 
     Buffer.prototype.updateSettings = function(settings) {
-      return this._settings = settings;
+      var delta;
+      this._settings = settings;
+      if (this._topBoundaryIndex != null) {
+        delta = (this._topBoundaryIndexTimestamp - new Date()) + settings.topBoundaryTimeout;
+        setTimeout(this._onStateChange, delta);
+      }
+      if (this._bottomBoundaryIndex != null) {
+        delta = (this._bottomBoundaryIndexTimestamp - new Date()) + settings.bottomBoundaryTimeout;
+        return setTimeout(this._onStateChange, delta);
+      }
     };
 
     Buffer.prototype.requestMoreTopItems = function(quantity, callback) {
@@ -353,7 +392,7 @@
       if (this._topItemsRequestId != null) {
         return;
       }
-      if (this._beginOfDataReached()) {
+      if (this.beginOfDataReached()) {
         return;
       }
       this._startTopRequest();
@@ -367,12 +406,11 @@
           }
           _this._stopTopRequest();
           if (res.length === 0) {
-            _this._topBoundaryIndex = end;
-            return _this._topBoundaryIndexTimestamp = new Date();
+            return _this._markTopBoundary(end);
           } else {
             _this._addItemsToStart(res);
             if (_this.start < _this._topBoundaryIndex) {
-              _this._topBoundaryIndex = null;
+              _this._unmarkTopBoundary();
             }
             return callback();
           }
@@ -380,7 +418,7 @@
       })(this));
     };
 
-    Buffer.prototype._beginOfDataReached = function() {
+    Buffer.prototype.beginOfDataReached = function() {
       var now;
       now = new Date();
       return this.start === this._topBoundaryIndex && (now - this._topBoundaryIndexTimestamp < this._settings.topBoundaryTimeout);
@@ -400,6 +438,18 @@
       return this._onStateChange();
     };
 
+    Buffer.prototype._markTopBoundary = function(topIndex) {
+      this._topBoundaryIndex = topIndex;
+      this._topBoundaryIndexTimestamp = new Date();
+      this._onStateChange();
+      return setTimeout(this._onStateChange, this._settings.topBoundaryTimeout);
+    };
+
+    Buffer.prototype._unmarkTopBoundary = function() {
+      this._topBoundaryIndex = null;
+      return this._onStateChange();
+    };
+
     Buffer.prototype._addItemsToStart = function(items) {
       var idx, item, j, len;
       this.start -= items.length;
@@ -415,7 +465,7 @@
       if (this._bottomItemsRequestId != null) {
         return;
       }
-      if (this._endOfDataReached()) {
+      if (this.endOfDataReached()) {
         return;
       }
       this._startBottomRequest();
@@ -428,12 +478,11 @@
           }
           _this._stopBottomRequest();
           if (res.length === 0) {
-            _this._bottomBoundaryIndex = start;
-            return _this._bottomBoundaryIndexTimestamp = new Date();
+            return _this._markBottomBoundary(start);
           } else {
             _this._addItemsToEnd(res);
             if (_this.start + _this.length > _this._bottomBoundaryIndex) {
-              _this._bottomBoundaryIndex = null;
+              _this._unmarkBottomBoundary();
             }
             return callback();
           }
@@ -441,7 +490,7 @@
       })(this));
     };
 
-    Buffer.prototype._endOfDataReached = function() {
+    Buffer.prototype.endOfDataReached = function() {
       var now;
       now = new Date();
       return this.start + this.length === this._bottomBoundaryIndex && (now - this._bottomBoundaryIndexTimestamp < this._settings.bottomBoundaryTimeout);
@@ -458,6 +507,18 @@
         return;
       }
       this._bottomItemsRequestId = null;
+      return this._onStateChange();
+    };
+
+    Buffer.prototype._markBottomBoundary = function(bottomIndex) {
+      this._bottomBoundaryIndex = bottomIndex;
+      this._bottomBoundaryIndexTimestamp = new Date();
+      this._onStateChange();
+      return setTimeout(this._onStateChange, this._settings.bottomBoundaryTimeout);
+    };
+
+    Buffer.prototype._unmarkBottomBoundary = function() {
+      this._bottomBoundaryIndex = null;
       return this._onStateChange();
     };
 
@@ -500,7 +561,8 @@
 
     Buffer.prototype.destroy = function() {
       this._topItemsRequestId = null;
-      return this._bottomItemsRequestId = null;
+      this._bottomItemsRequestId = null;
+      return this._originalStateChange = function() {};
     };
 
     return Buffer;

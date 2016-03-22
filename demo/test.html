@@ -33,7 +33,8 @@
     <div class="editor-body" scroller-viewport="getData">
       <div>
         <p ng-show="scrLoadingTop">Top data is loading...</p>
-        <p ng-show="!scrLoadingTop">&nbsp</p>
+        <p ng-show="scrReachedTop">Begin of data is reached</p>
+        <p ng-show="!scrLoadingTop && !scrReachedTop">&nbsp</p>
       </div>
       <div class="text">
         <div class="numbers"><p scroller-item>{{scrIndex}}</p></div>
@@ -41,7 +42,8 @@
       </div>
       <div>
         <p ng-show="scrLoadingBottom">Bottom data is loading...</p>
-        <p ng-show="!scrLoadingBottom">&nbsp</p>
+        <p ng-show="scrReachedBottom">End of data is reached</p>
+        <p ng-show="!scrLoadingBottom && !scrReachedBottom">&nbsp</p>
       </div>
     </div>
   </body>

@@ -3,6 +3,8 @@
 # * Class members starting with underscore are **private** and should not be accessed
 # * Other class members are **read-only**
 # * All the changes to class should be done using public methods
+# * Every property of an object should be assigned in constructor, even if its initial value is null
+# or undefined. No new properties should be introduced during object lifecycle.
 
 # ### <section id='VIEWPORT_DEFAULT_SETTINGS'>Default settings</section>
 # Default settings for viewport. If any setting is not listed in scope, it will be copied from this
@@ -29,8 +31,8 @@ VIEWPORT_DEFAULT_SETTINGS =
     # See [`ScrollerViewport._updateState`](#ScrollerViewport._updateState) for details.
     afterScrollWaitTime: 100
     # Number of milliseconds after which viewport will allow re-checking boundary of data. See
-    # [`Buffer._beginOfDataReached`](#Buffer._beginOfDataReached) and
-    # [`Buffer._endOfDataReached`](#Buffer._endOfDataReached) for details.
+    # [`Buffer.beginOfDataReached`](#Buffer.beginOfDataReached) and
+    # [`Buffer.endOfDataReached`](#Buffer.endOfDataReached) for details.
     buffer:
         topBoundaryTimeout: 10000
         bottomBoundaryTimeout: 10000
@@ -75,7 +77,7 @@ class ScrollerViewport
     # `settings`: `object`. Settings object with structure similar to
     # [default settings](#VIEWPORT_DEFAULT_SETTINGS)
     constructor: (@scope, @_element, source, settings={}) ->
-        @_settings = angular.merge(settings, VIEWPORT_DEFAULT_SETTINGS)
+        @_settings = angular.merge({}, VIEWPORT_DEFAULT_SETTINGS, settings)
 
         # Viewport keeps track of currently rendered items in format
         # `{index: int, data: data_received_from_source_function}`
@@ -83,6 +85,16 @@ class ScrollerViewport
 
         # [`Buffer`](#Buffer) caches data from `source`
         @_buffer = new Buffer(source, @_settings.buffer, @_updateBufferState)
+
+        # Auto update makes sure we do not miss special or untrackable events.
+        @_autoUpdateHandler = null
+
+        # See [`_updateStateAsync`](#ScrollerViewport._updateStateAsync) for details.
+        @_updatePlanned = false
+
+        # See [`_updateState`](#ScrollerViewport._updateState) for details.
+        @_lastScrollTop = null
+        @_lastScrollTopChange = null
 
         # First update to start the process. `scroll` event most likely will cause actions to
         # perform. Finally, `_changeAutoUpdateInterval` function sets auto updates for any events
@@ -92,7 +104,7 @@ class ScrollerViewport
         @_changeAutoUpdateInterval(@_settings.autoUpdateInterval)
 
     updateSettings: (settings={}) =>
-        angular.merge(settings, VIEWPORT_DEFAULT_SETTINGS)
+        settings = angular.merge({}, VIEWPORT_DEFAULT_SETTINGS, settings)
         if @_settings.autoUpdateInterval != settings.autoUpdateInterval
             @_changeAutoUpdateInterval(settings.autoUpdateInterval)
         @_settings = settings
@@ -106,9 +118,19 @@ class ScrollerViewport
 
     # Updates buffer-related state (loading top, loading bottom, etc) in scope
     _updateBufferState: =>
+        oldReachedTop = null
+        oldReachedBottom = null
         @scope.$applyAsync =>
             @scope.scrLoadingTop = @_buffer.topIsLoading()
+            @scope.scrReachedTop = @_buffer.beginOfDataReached()
             @scope.scrLoadingBottom = @_buffer.bottomIsLoading()
+            @scope.scrReachedBottom = @_buffer.endOfDataReached()
+            if oldReachedTop != @scope.scrReachedTop
+                @_updateStateAsync()
+                oldReachedTop = @scope.scrReachedTop
+            if oldReachedBottom != @scope.scrReachedBottom
+                @_updateStateAsync()
+                oldReachedBottom = @scope.scrReachedBottom
 
     # ## <section id='ScrollerViewport._changeAutoUpdateInterval'></section>
     # Sets interval for auto updates. Auto update makes sure we do not miss special or untrackable
@@ -153,6 +175,7 @@ class ScrollerViewport
         else if paddingBottom > @_settings.paddingBottom.max
             @_removeBottomDrawnItem()
 
+    # ## <section id='ScrollerViewport._updateStateAsync'></section>
     # `@_updateState` should not be called directly since it could cause multiple simultaneous
     # updates. `@_updateStateAsync` makes sure only one update is performed per tick.
     _updateStateAsync: =>
@@ -193,7 +216,7 @@ class ScrollerViewport
     # `ScrollerItemList` controllers. Items should be drawn this tick so update on the next tick
     # will see changes and will be able to make new decisions.
     _addTopDrawnItem: (item) =>
-        @_drawnItems = [item].concat(@_drawnItems)
+        @_drawnItems.unshift(item)
         @scope.$broadcast('render-top-item', item)
         @_updateStateAsync()
 
@@ -212,7 +235,7 @@ class ScrollerViewport
         @_buffer.truncateTo(bufferMinStart, bufferMaxEnd)
 
     _removeTopDrawnItem: =>
-        @_drawnItems = @_drawnItems[1..]
+        @_drawnItems.shift()
         @scope.$broadcast('remove-top-item')
         @_truncateBuffer()
         @_updateStateAsync()
@@ -305,33 +328,49 @@ class ScrollerItemList
 # truncating stored items.
 class Buffer
     # `getItems`: `function(start, count, callback)`. See [`ScrollerViewport`](#ScrollerViewport)
-    # constructor for details
+    # constructor for details.
     #
     # `settings`: `object`
     # * `topBoundaryTimeout`: amount of time (ms) when hitting top boundary is considered valid.
     # After that time requests for top items will be allowed.
     # * `bottomBoundaryTimeout`: same as top `bottomBoundaryTimeout`, but for bottom boundary.
     #
-    # `onStateChange`: `function()`. Called when buffer state (top boundary hit, loading top,
+    # `originalStateChange`: `function()`. Called when buffer state (top boundary hit, loading top,
     # bottom boundary hit, loading bottom) could be changed. Called in constructor. Not called in
-    # destructor
-    constructor: (@_getItems, @_settings, @_onStateChange) ->
+    # destructor.
+    constructor: (@_getItems, @_settings, @_originalStateChange) ->
         @start = 0
         @length = 0
         @_counter = 0
         @_topItemsRequestId = null
         @_bottomItemsRequestId = null
+        @_topBoundaryIndex = null
+        @_topBoundaryIndexTimestamp = null
+        @_bottomBoundaryIndex = null
+        @_bottomBoundaryIndexTimestamp = null
+        # If buffer gets destroyed, noop will be called instead of function that we got in
+        # constructor. We cannot change _onStateChange in destructor because functions passed to
+        # setTimeout will still be unchanged.
+        @_onStateChange = =>
+            @_originalStateChange()
         @_onStateChange()
 
     updateSettings: (settings) =>
         @_settings = settings
+        # make sure changes in settings change our state properly
+        if @_topBoundaryIndex?
+            delta = (@_topBoundaryIndexTimestamp - new Date()) + settings.topBoundaryTimeout
+            setTimeout(@_onStateChange, delta)
+        if @_bottomBoundaryIndex?
+            delta = (@_bottomBoundaryIndexTimestamp - new Date()) + settings.bottomBoundaryTimeout
+            setTimeout(@_onStateChange, delta)
 
     # ## <section id='Buffer.requestMoreTopItems'></section>
     # Only one request of top items may be active at a time. That ensures that multiple actions like
     # "scroll to bottom and back to top" does not make multiple requests.
     requestMoreTopItems: (quantity, callback) =>
         return if @_topItemsRequestId?
-        return if @_beginOfDataReached()
+        return if @beginOfDataReached()
         @_startTopRequest()
         request_id = @_topItemsRequestId
         start = @start - quantity
@@ -341,19 +380,18 @@ class Buffer
             return if request_id != @_topItemsRequestId
             @_stopTopRequest()
             if res.length == 0
-                @_topBoundaryIndex = end
-                @_topBoundaryIndexTimestamp = new Date()
+                @_markTopBoundary(end)
             else
                 @_addItemsToStart(res)
                 if @start < @_topBoundaryIndex
-                    @_topBoundaryIndex = null
+                    @_unmarkTopBoundary()
                 callback()
 
-    # ## <section id='Buffer._beginOfDataReached'></section>
+    # ## <section id='Buffer.beginOfDataReached'></section>
     # This function tracks "begin of data". If we request top items and receive empty result, we
     # assume that we reached "begin of data". We will not do any requests of top items for some
     # (configurable) time. After that time requests for top items will be allowed.
-    _beginOfDataReached: =>
+    beginOfDataReached: =>
         now = new Date()
         return @start == @_topBoundaryIndex &&
             (now - @_topBoundaryIndexTimestamp < @_settings.topBoundaryTimeout)
@@ -369,17 +407,27 @@ class Buffer
         @_topItemsRequestId = null
         @_onStateChange()
 
+    _markTopBoundary: (topIndex) =>
+        @_topBoundaryIndex = topIndex
+        @_topBoundaryIndexTimestamp = new Date()
+        @_onStateChange()
+        setTimeout(@_onStateChange, @_settings.topBoundaryTimeout)
+
+    _unmarkTopBoundary: =>
+        @_topBoundaryIndex = null
+        @_onStateChange()
+
     _addItemsToStart: (items) =>
         @start -= items.length
         for item, idx in items
-            @[@start + idx] = item
+            this[@start + idx] = item
         @length += items.length
 
     # ## <section id='Buffer.requestMoreBottomItems'></section>
     # See [`@requestMoreTopItems`](#Buffer.requestMoreTopItems) for additional comments
     requestMoreBottomItems: (quantity, callback) =>
         return if @_bottomItemsRequestId?
-        return if @_endOfDataReached()
+        return if @endOfDataReached()
         @_startBottomRequest()
         request_id = @_bottomItemsRequestId
         start = @start + @length
@@ -388,17 +436,16 @@ class Buffer
             return if request_id != @_bottomItemsRequestId
             @_stopBottomRequest()
             if res.length == 0
-                @_bottomBoundaryIndex = start
-                @_bottomBoundaryIndexTimestamp = new Date()
+                @_markBottomBoundary(start)
             else
                 @_addItemsToEnd(res)
                 if @start + @length > @_bottomBoundaryIndex
-                    @_bottomBoundaryIndex = null
+                    @_unmarkBottomBoundary()
                 callback()
 
-    # ## <section id='Buffer._endOfDataReached'></section>
-    # See [`@_beginOfDataReached`](#Buffer._beginOfDataReached) for additional comments
-    _endOfDataReached: =>
+    # ## <section id='Buffer.endOfDataReached'></section>
+    # See [`@beginOfDataReached`](#Buffer.beginOfDataReached) for additional comments
+    endOfDataReached: =>
         now = new Date()
         return @start + @length == @_bottomBoundaryIndex &&
             (now - @_bottomBoundaryIndexTimestamp < @_settings.bottomBoundaryTimeout)
@@ -414,9 +461,19 @@ class Buffer
         @_bottomItemsRequestId = null
         @_onStateChange()
 
+    _markBottomBoundary: (bottomIndex) =>
+        @_bottomBoundaryIndex = bottomIndex
+        @_bottomBoundaryIndexTimestamp = new Date()
+        @_onStateChange()
+        setTimeout(@_onStateChange, @_settings.bottomBoundaryTimeout)
+
+    _unmarkBottomBoundary: =>
+        @_bottomBoundaryIndex = null
+        @_onStateChange()
+
     _addItemsToEnd: (items) =>
         for item, idx in items
-            @[@start + @length + idx] = item
+            this[@start + @length + idx] = item
         @length += items.length
 
     truncateTo: (start, end) =>
@@ -431,7 +488,7 @@ class Buffer
         cur_end = @start + @length - 1
         if cur_end > end
             for i in [cur_end...end]
-                delete @[i]
+                delete this[i]
             @length = Math.max(0, @length - (cur_end - end))
             # Cancel current bottom items request because we created a gap between items in this
             # request and end of buffer
@@ -445,6 +502,10 @@ class Buffer
     destroy: =>
         @_topItemsRequestId = null
         @_bottomItemsRequestId = null
+        # `@_onStateChange` could be called in future because it was passed to `setTimeout`.
+        # Changing `@_originalStateChange` to noop ensures that `@_onStateChange` will not change
+        # anything.
+        @_originalStateChange = ->
 
 
 angular.module('scroller', [])
