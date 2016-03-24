@@ -65,14 +65,18 @@ class ScrollerViewport
     #
     # `element`: `DOM Node` bound to this viewport
     #
-    # `source`: `function(start, count, callback)`. This function is called whenever new data is
-    # needed.
+    # `source`: could be complex object or just a function. Complex object should contain:
+    # * `initialIndex`: index of the element to start with
+    # * `get`: `function(start, count, callback)`. This function is called whenever new data is
+    #   needed.
     #
-    # * `start`: `int`
-    # * `count`: `int`
-    # * `callback`: `function(res)`. Callback should be called when needed data is ready.
-    #  * `res`: `array`. Should contain `count` items in it. If request hit boundary of data, `res`
-    #     can contain less then `count` data or even no data at all.
+    #  * `start`: `int`
+    #  * `count`: `int`
+    #  * `callback`: `function(res)`. Callback should be called when needed data is ready.
+    #   * `res`: `array`. Should contain `count` items in it. If request hit boundary of data, `res`
+    #      can contain less then `count` data or even no data at all.
+    #
+    # If `source` is just a `function`, `initialIndex` is considered to be 0.
     #
     # `settings`: `object`. Settings object with structure similar to
     # [default settings](#VIEWPORT_DEFAULT_SETTINGS)
@@ -83,8 +87,7 @@ class ScrollerViewport
         # `{index: int, data: data_received_from_source_function}`
         @_drawnItems = []
 
-        # [`Buffer`](#Buffer) caches data from `source`
-        @_buffer = new Buffer(source, @_settings.buffer, @_updateBufferState)
+        @_setSource(source)
 
         # Auto update makes sure we do not miss special or untrackable events.
         @_autoUpdateHandler = null
@@ -112,9 +115,19 @@ class ScrollerViewport
 
     updateSource: (source) =>
         @_buffer.destroy()
-        @_buffer = new Buffer(source, @_settings.buffer, @_updateBufferState)
         @_drawnItems = []
         @scope.$broadcast('clear')
+        @_setSource(source)
+
+    _setSource: (source) =>
+        start = 0
+        if typeof(source) == 'object'
+            start = source.initialIndex
+            source = source.get
+        # [`Buffer`](#Buffer) caches data from `source`
+        @_buffer = new Buffer(source, start, @_settings.buffer, @_updateBufferState)
+        @_renderFrom = start
+        @_topRenderAllowed = false
 
     # Updates buffer-related state (loading top, loading bottom, etc) in scope
     _updateBufferState: =>
@@ -142,6 +155,15 @@ class ScrollerViewport
     # ## <section id='ScrollerViewport._updateState'></section>
     # Main function for this class. It performs measurements and makes decision on what to do.
     _updateState: =>
+        # During "initialization" only rendering of bottom items allowed. This is done to prevent
+        # changing of position of top (initial) element. This stage is over if content height equals
+        # to element height (that would be enough to keep initial item in place when rendering top
+        # items) or bottom boundary of data is reached.
+        if !@_topRenderAllowed
+            if @_element.scrollHeight > @_element.offsetHeight \
+            || @_buffer.endOfDataReached()
+                @_topRenderAllowed = true
+
         # Firstly, check size of contents that is hidden on top. However, if you want to change
         # top of rendered items, you have to make sure you won't break current scrolling process.
         # When user scrolls contents of viewport, it is a process stretched in time, scrollTop will
@@ -153,20 +175,22 @@ class ScrollerViewport
         # `@_lastScrollTop` remembers last scrollTop measured and `@_lastScrollTopChange` remembers
         # time of measurement.
         now = new Date()
-        if @_element.scrollTop == @_lastScrollTop && now - @_lastScrollTopChange > @_settings.afterScrollWaitTime
-            # Code here assumes changing `@_element.scrollTop` is safe
-            if @_element.scrollTop > @_settings.paddingTop.max
-                @_removeTopDrawnItem()
-            else if @_element.scrollTop < @_settings.paddingTop.min
-                @_tryDrawTopItem()
-        else
-            # Code here assumes changing `@_element.scrollTop` is not safe
-            if @_element.scrollTop != @_lastScrollTop
-                @_lastScrollTop = @_element.scrollTop
-                @_lastScrollTopChange = now
-            # We wanted to updated state but could not do it due to scrolling. Plan update for the
-            # next tick.
-            @_updateStateAsync()
+        if @_topRenderAllowed
+            if @_element.scrollTop == @_lastScrollTop \
+            && now - @_lastScrollTopChange > @_settings.afterScrollWaitTime
+                # Code here assumes changing `@_element.scrollTop` is safe
+                if @_element.scrollTop > @_settings.paddingTop.max
+                    @_removeTopDrawnItem()
+                else if @_element.scrollTop < @_settings.paddingTop.min
+                    @_tryDrawTopItem()
+            else
+                # Code here assumes changing `@_element.scrollTop` is not safe
+                if @_element.scrollTop != @_lastScrollTop
+                    @_lastScrollTop = @_element.scrollTop
+                    @_lastScrollTopChange = now
+                # We wanted to updated state but could not do it due to scrolling. Plan update for
+                # the next tick.
+                @_updateStateAsync()
 
         # Unlike top, we can change bottom any time we need.
         paddingBottom = @_element.scrollHeight - @_element.scrollTop - @_element.offsetHeight
@@ -206,7 +230,7 @@ class ScrollerViewport
         if @_drawnItems.length > 0
             neededIndex = @_drawnItems[@_drawnItems.length - 1].index + 1
         else
-            neededIndex = 0
+            neededIndex = @_renderFrom
         if neededIndex of @_buffer
             @_addBottomDrawnItem({index: neededIndex, data: @_buffer[neededIndex]})
         else
@@ -338,8 +362,7 @@ class Buffer
     # `originalStateChange`: `function()`. Called when buffer state (top boundary hit, loading top,
     # bottom boundary hit, loading bottom) could be changed. Called in constructor. Not called in
     # destructor.
-    constructor: (@_getItems, @_settings, @_originalStateChange) ->
-        @start = 0
+    constructor: (@_getItems, @start, @_settings, @_originalStateChange) ->
         @length = 0
         @_counter = 0
         @_topItemsRequestId = null

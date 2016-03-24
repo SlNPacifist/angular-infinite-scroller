@@ -33,7 +33,7 @@ List module 'scroller' in your app module dependencies:
 Now you can use directives:
 
 ```html
-<ANY scroller-viewport="getData" scroller-settings="scrollerSettings">
+<ANY scroller-viewport="getData" scroller-settings="scrollerSettings" style="height: 500px">
     <ANY scroller-item>{{scrIndex}} {{scrData}}</ANY>
 </ANY>
 ```
@@ -58,7 +58,9 @@ drops top boundary flag and only after that it start new request for top data.
 * `!loading & reached`: top boundary was reached.
 * `loading & reached`: only possible if configuration changes. If `buffer.topBoundaryTimeout` or
 `buffer.bottomBoundaryTimeout` changes to a bigger value it is possible that request for data is
-performed and old boundary becomes valid again.  
+performed and old boundary becomes valid again.
+
+Scroller viewport height should be limited somehow or it will grow indefinitely.
 
 `scroller-item` is a directive that is repeated for every rendered item. It adds item data to scope:
 
@@ -77,14 +79,25 @@ Note that contents of viewport may be arbitrary and scroller-item could be used 
 In this example both index and data will be rendered for every item. That is useful when you want to
 render parts of your items in different parts of viewport.
 
-`scroller-viewport` attribute should refer a `function(index, count, callback)`:
+`scroller-viewport` attribute can be complex object or just a function. Complex object should
+contain:
 
-* `index` - integer, could be any integer (even less then zero)
-* `count` - integer, 1 or greater
-* `callback` - `function(res)`:
-    
-    * `res` should be an array. Items of this array will become scrData in scroller-item. `res`
-should contain `count` items.
+* `initialIndex`: index of the element to start with
+* `get`: `function(start, count, callback)`. This function is called whenever new data is
+needed.
+
+    * `start`: `int`
+    * `count`: `int`
+    * `callback`: `function(res)`. Callback should be called when needed data is ready.
+        * `res`: `array`. Should contain `count` items in it. If request hit boundary of data, `res`
+        can contain less then `count` data or even no data at all.
+
+If `scroller-viewport` is just a `function`, `initialIndex` is considered to be 0.
+
+During first stage, only initialIndex item and subsequent items will be rendered. When they fill
+the whole viewport, rendering of top items will be allowed. This is done to improve user experience:
+user will see same picture (initialIndex item on top of viewport) every single time. That will not
+depend on what is loaded first: top items or bottom items.
 
 ### Known issues
 

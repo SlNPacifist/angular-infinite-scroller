@@ -52,11 +52,12 @@
       this._updateState = bind(this._updateState, this);
       this._changeAutoUpdateInterval = bind(this._changeAutoUpdateInterval, this);
       this._updateBufferState = bind(this._updateBufferState, this);
+      this._setSource = bind(this._setSource, this);
       this.updateSource = bind(this.updateSource, this);
       this.updateSettings = bind(this.updateSettings, this);
       this._settings = angular.merge({}, VIEWPORT_DEFAULT_SETTINGS, settings);
       this._drawnItems = [];
-      this._buffer = new Buffer(source, this._settings.buffer, this._updateBufferState);
+      this._setSource(source);
       this._autoUpdateHandler = null;
       this._updatePlanned = false;
       this._lastScrollTop = null;
@@ -80,9 +81,21 @@
 
     ScrollerViewport.prototype.updateSource = function(source) {
       this._buffer.destroy();
-      this._buffer = new Buffer(source, this._settings.buffer, this._updateBufferState);
       this._drawnItems = [];
-      return this.scope.$broadcast('clear');
+      this.scope.$broadcast('clear');
+      return this._setSource(source);
+    };
+
+    ScrollerViewport.prototype._setSource = function(source) {
+      var start;
+      start = 0;
+      if (typeof source === 'object') {
+        start = source.initialIndex;
+        source = source.get;
+      }
+      this._buffer = new Buffer(source, start, this._settings.buffer, this._updateBufferState);
+      this._renderFrom = start;
+      return this._topRenderAllowed = false;
     };
 
     ScrollerViewport.prototype._updateBufferState = function() {
@@ -116,19 +129,26 @@
 
     ScrollerViewport.prototype._updateState = function() {
       var now, paddingBottom;
+      if (!this._topRenderAllowed) {
+        if (this._element.scrollHeight > this._element.offsetHeight || this._buffer.endOfDataReached()) {
+          this._topRenderAllowed = true;
+        }
+      }
       now = new Date();
-      if (this._element.scrollTop === this._lastScrollTop && now - this._lastScrollTopChange > this._settings.afterScrollWaitTime) {
-        if (this._element.scrollTop > this._settings.paddingTop.max) {
-          this._removeTopDrawnItem();
-        } else if (this._element.scrollTop < this._settings.paddingTop.min) {
-          this._tryDrawTopItem();
+      if (this._topRenderAllowed) {
+        if (this._element.scrollTop === this._lastScrollTop && now - this._lastScrollTopChange > this._settings.afterScrollWaitTime) {
+          if (this._element.scrollTop > this._settings.paddingTop.max) {
+            this._removeTopDrawnItem();
+          } else if (this._element.scrollTop < this._settings.paddingTop.min) {
+            this._tryDrawTopItem();
+          }
+        } else {
+          if (this._element.scrollTop !== this._lastScrollTop) {
+            this._lastScrollTop = this._element.scrollTop;
+            this._lastScrollTopChange = now;
+          }
+          this._updateStateAsync();
         }
-      } else {
-        if (this._element.scrollTop !== this._lastScrollTop) {
-          this._lastScrollTop = this._element.scrollTop;
-          this._lastScrollTopChange = now;
-        }
-        this._updateStateAsync();
       }
       paddingBottom = this._element.scrollHeight - this._element.scrollTop - this._element.offsetHeight;
       if (paddingBottom < this._settings.paddingBottom.min) {
@@ -173,7 +193,7 @@
       if (this._drawnItems.length > 0) {
         neededIndex = this._drawnItems[this._drawnItems.length - 1].index + 1;
       } else {
-        neededIndex = 0;
+        neededIndex = this._renderFrom;
       }
       if (neededIndex in this._buffer) {
         return this._addBottomDrawnItem({
@@ -334,8 +354,9 @@
   })();
 
   Buffer = (function() {
-    function Buffer(_getItems, _settings, _originalStateChange) {
+    function Buffer(_getItems, start1, _settings, _originalStateChange) {
       this._getItems = _getItems;
+      this.start = start1;
       this._settings = _settings;
       this._originalStateChange = _originalStateChange;
       this.destroy = bind(this.destroy, this);
@@ -357,7 +378,6 @@
       this.beginOfDataReached = bind(this.beginOfDataReached, this);
       this.requestMoreTopItems = bind(this.requestMoreTopItems, this);
       this.updateSettings = bind(this.updateSettings, this);
-      this.start = 0;
       this.length = 0;
       this._counter = 0;
       this._topItemsRequestId = null;
